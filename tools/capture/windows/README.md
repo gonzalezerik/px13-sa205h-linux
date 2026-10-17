@@ -210,7 +210,9 @@ pnputil /enum-devices /connected /class HID > hid-after.txt
 ## Session 04 — haptics
 
 Answers: when the haptics host triggers, what intensity/on-off map to, which
-apps get haptic ink.
+apps get haptic ink, and **where the settings persist** (static analysis
+narrowed the store to the registry or the per-user settings store — this
+session proves which).
 
 ```bat
 mkdir C:\mpp-captures\04-haptics && cd /d C:\mpp-captures\04-haptics
@@ -218,10 +220,28 @@ wpr -start BusesAllProfile.wprp!InputOnlyProfile.Verbose.File
 log "s04: trace started"
 ```
 
+Persistence snapshot #1 (before any change; locked CDP files are skipped, a
+partial copy is fine — the diff is done offline after import):
+
+```bat
+mkdir snap-before
+reg export HKCU\Software snap-before\hkcu.reg /y
+robocopy %LOCALAPPDATA%\ConnectedDevicesPlatform snap-before\cdp /e /r:0 /w:0
+log "s04: snapshot 1 taken"
+```
+
 With the pen paired over Bluetooth:
 
 1. Settings → Pen & Windows Ink: screenshot the haptics section; toggle
    haptics off, on; move the intensity slider to each stop, `log` each change.
+   Then persistence snapshot #2:
+
+   ```bat
+   mkdir snap-after
+   reg export HKCU\Software snap-after\hkcu.reg /y
+   robocopy %LOCALAPPDATA%\ConnectedDevicesPlatform snap-after\cdp /e /r:0 /w:0
+   log "s04: snapshot 2 taken"
+   ```
 2. Open an inking app that offers pen tools (Whiteboard, Paint, Sticky Notes):
    draw with each tool (pen/pencil/marker/eraser) for ~5 s each, `log` each
    tool switch. Note audibly/physically which tools actually vibrate.
