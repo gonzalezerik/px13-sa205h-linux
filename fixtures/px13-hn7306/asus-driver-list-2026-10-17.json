@@ -1,0 +1,233 @@
+[
+ {
+  "category": "Networking",
+  "title": "MediaTek WLAN Driver",
+  "version": "V5.6.0.3906",
+  "date": "2025/12/08",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Networking/43760/WirelessLan_DCH_MediaTek_Z_V5.6.0.3906_43760.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Networking",
+  "title": "MediaTek WLAN Driver",
+  "version": "V3.4.2.1304",
+  "date": "2025/08/05",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Networking/44135/WirelessLan_DCH_MediaTek_Z_V3.4.2.1304_44135_1.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Chipset",
+  "title": "AMD Chipset Driver",
+  "version": "V1.2.0.126",
+  "date": "2026/01/15",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Chipset/47827/AMD_Chipset_DriverOnly_DCH_AMD_Z_V1.2.0.126Sub17_47827.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Audio",
+  "title": "TI Smart Amplifier Driver for Speakers",
+  "version": "V6.3.1.15",
+  "date": "2026/01/08",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Audio/47519/SmartAMP_TI_DCH_TexasInstruments_Z_V6.3.1.15_47519.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Audio",
+  "title": "SoundWire RealtekAudio_Driver",
+  "version": "V10.0.352.1",
+  "date": "2026/04/13",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Audio/48977/RealtekAudio_Driver_Dolby_Realtek_Z_V10.0.352.1_48977.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Audio",
+  "title": "SoundWire RealtekAudio_Driver",
+  "version": "V10.0.294.1",
+  "date": "2025/12/08",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Audio/46902/RealtekAudio_Driver_Dolby_Realtek_Z_V10.0.294.1_46902.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Audio",
+  "title": "Realtek Codec Console Application",
+  "version": "latest version at the MS store",
+  "date": "2022/09/07",
+  "url": "https://www.microsoft.com/store/apps/9p2b8mcsvpln?tp=RHJpdmVyTm90ZWJvb2s="
+ },
+ {
+  "category": "Graphics",
+  "title": "AMD Graphics Driver",
+  "version": "V32.0.22032.6002",
+  "date": "2026/01/15",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Graphics/47828/AMD_Graphic_DriverOnly_DCH_AMD_Z_V32.0.22032.6002_47828.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Graphics",
+  "title": "AMD Graphics Driver",
+  "version": "V32.0.22024.2",
+  "date": "2025/12/09",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Graphics/46375/AMD_Graphic_DriverOnly_DCH_AMD_Z_V32.0.22024.2Sub1_46375.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Graphics",
+  "title": "AMD Graphic Control Panel Application",
+  "version": "latest version at the MS store",
+  "date": "2022/09/06",
+  "url": "https://www.microsoft.com/store/apps/9N9370CRZ0FN?tp=RHJpdmVyTm90ZWJvb2s="
+ },
+ {
+  "category": "Card Reader",
+  "title": "Genesys Card Reader Driver",
+  "version": "V1.1.51.0",
+  "date": "2025/10/31",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/CardReader/43844/CardReader_DCH_Genesys_Z_V1.1.51.0_43844.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Pointing Device",
+  "title": "ELAN Wake On Touch (WoT) Driver",
+  "version": "V1.0.1.16",
+  "date": "2025/12/08",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/PointingDevice/46783/WoT_DCH_ELAN_Z_V1.0.1.16_46783.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Pointing Device",
+  "title": "ELAN Seamless Pairing Driver",
+  "version": "V1.2.2.4",
+  "date": "2025/12/08",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/PointingDevice/46362/SeamlessPairing_DCH_ELAN_Z_V1.2.2.4_46362.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Pointing Device",
+  "title": "ASUS DialPad Driver",
+  "version": "V24.0.0.21",
+  "date": "2026/03/05",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/PointingDevice/48289/PrecisionTouchPadDialPad_ASUS_Z_V24.0.0.21_48289.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Pointing Device",
+  "title": "ASUS DialPad Driver",
+  "version": "V24.0.0.20",
+  "date": "2025/12/08",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/PointingDevice/45922/PrecisionTouchPadDialPad_ASUS_Z_V24.0.0.20_45922.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Bluetooth",
+  "title": "MediaTek Bluetooth Driver",
+  "version": "V1.1043.2.545",
+  "date": "2025/08/05",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Bluetooth/44136/Bluetooth_DCH_MediaTek_Z_V1.1043.2.545_44136_1.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Bluetooth",
+  "title": "MediaTek Bluetooth Driver",
+  "version": "V1.1043.0.532",
+  "date": "2025/12/08",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Bluetooth/43761/Bluetooth_DCH_MediaTek_Z_V1.1043.0.532_43761.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Camera",
+  "title": "Realtek Camera_Extension",
+  "version": "V10.0.22000.10002",
+  "date": "2024/05/31",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/Camera/38000/Camera_Extension_Realtek_Z_V10.0.22000.10002_38000_1.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Software and Utility",
+  "title": "Virtual Assistant",
+  "version": "V4.3.3",
+  "date": "2026/02/10",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Software/SoftwareandUtility/17495/VirtualAssistant_ASUS_Z_V4.3.3_17495_2.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Software and Utility",
+  "title": "Virtual Assistant",
+  "version": "V4.1.1",
+  "date": "2025/08/22",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Software/SoftwareandUtility/16838/VirtualAssistant_ASUS_Z_V4.1.1_16838_3.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Software and Utility",
+  "title": "StoryCube",
+  "version": "latest version at the MS store",
+  "date": "2024/04/19",
+  "url": "https://www.microsoft.com/store/apps/9PMLHN8MZT2T?tp=U29mdHdhcmVOb3RlYm9vaw=="
+ },
+ {
+  "category": "Software and Utility",
+  "title": "ScreenXpert",
+  "version": "latest version at the MS store",
+  "date": "2022/09/05",
+  "url": "https://www.microsoft.com/store/apps/9N5RFFGFHHP6?tp=U29mdHdhcmVOb3RlYm9vaw=="
+ },
+ {
+  "category": "Software and Utility",
+  "title": "ProArt Creator Hub",
+  "version": "latest version at the MS store",
+  "date": "2021/01/28",
+  "url": "https://www.microsoft.com/store/apps/9NM0HH6WDN7Q?tp=U29mdHdhcmVOb3RlYm9vaw=="
+ },
+ {
+  "category": "Software and Utility",
+  "title": "MyASUS",
+  "version": "latest version at the MS store",
+  "date": "2022/09/08",
+  "url": "https://www.microsoft.com/store/apps/9N7R5S6B0ZZH?tp=U29mdHdhcmVOb3RlYm9vaw=="
+ },
+ {
+  "category": "Software and Utility",
+  "title": "MyASUS Splendid",
+  "version": "V3.0.0.786",
+  "date": "2025/12/08",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/SoftwareandUtility/46145/MyASUSSplendid_ASUS_Z_V3.0.0.786_46145.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Software and Utility",
+  "title": "Microsoft Effect Pack(MEP) driver",
+  "version": "V2.0.28.0",
+  "date": "2026/01/15",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/SoftwareandUtility/47939/MSFT_MEP_DCH_Microsoft_Z_V2.0.28.0_47939.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Software and Utility",
+  "title": "Microsoft Effect Pack(MEP) driver",
+  "version": "V2.0.16.0",
+  "date": "2025/11/07",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/SoftwareandUtility/46316/MSFT_MEP_DCH_Microsoft_Z_V2.0.16.0Sub3_46316.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Software and Utility",
+  "title": "GlideX",
+  "version": "latest version at the MS store",
+  "date": "2021/12/23",
+  "url": "https://www.microsoft.com/store/apps/9PLH2SV1DVK5?tp=U29mdHdhcmVOb3RlYm9vaw=="
+ },
+ {
+  "category": "Software and Utility",
+  "title": "Dolby Atmos driver",
+  "version": "V10.1031.743.43",
+  "date": "2025/11/10",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Software/SoftwareandUtility/17160/ASUS_Z_V10.1031.743.43_17160_2.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Software and Utility",
+  "title": "ASUS System Control Interface v3",
+  "version": "V3.1.72.0",
+  "date": "2026/09/23",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Software/SoftwareandUtility/18060/ASUSSystemControlInterfacev3_ASUS_Z_V3.1.72.0_18060.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Software and Utility",
+  "title": "ASUS System Control Interface v3",
+  "version": "V3.1.70.0",
+  "date": "2026/08/24",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/Image/Software/SoftwareandUtility/17972/ASUSSystemControlInterfacev3_ASUS_Z_V3.1.70.0_17972.exe?model=HN7306EAC"
+ },
+ {
+  "category": "Software and Utility",
+  "title": "ASUS Control Panel Toolkit",
+  "version": "latest version at the MS store",
+  "date": "2023/07/14",
+  "url": "https://www.microsoft.com/store/apps/9P1PR01M9DLM?tp=U29mdHdhcmVOb3RlYm9vaw=="
+ },
+ {
+  "category": "Software and Utility",
+  "title": "MuseTree Installer",
+  "version": "V1.0.9.0",
+  "date": "2026/05/25",
+  "url": "https://dlcdnets.asus.com/pub/ASUS/nb/MuseTree/AsusMuseTreeInstaller.exe?model=HN7306EAC"
+ }
+]
