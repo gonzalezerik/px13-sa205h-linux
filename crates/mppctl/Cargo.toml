@@ -9,7 +9,7 @@ repository.workspace = true
 description = "Command-line client for mppd"
 
 [dependencies]
-mpp-core = { path = "../mpp-core" }
+mpp-core = { path = "../mpp-core", version = "0.0.1" }
 
 [lints]
 workspace = true
