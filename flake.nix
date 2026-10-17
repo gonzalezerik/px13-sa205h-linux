@@ -31,7 +31,7 @@
         };
       });
 
-      checks = forAll (pkgs: { build = self.packages.${pkgs.system}.default; });
+      checks = forAll (pkgs: { build = self.packages.${pkgs.stdenv.hostPlatform.system}.default; });
 
       devShells = forAll (pkgs:
         let
@@ -46,12 +46,14 @@
               cargo rustc clippy rustfmt rust-analyzer cargo-deny pkg-config
               # reverse-engineering workbench (Ghidra runs headless only)
               nodejs_24 procps util-linux ghidra jdk21 rizin radare2 gdb ilspycmd
-              innoextract msitools _7zz cabextract wimlib binwalk unblob upx
+              innoextract msitools _7zz cabextract binwalk unblob upx
               # HID / input / Bluetooth observation
               hid-tools evtest evemu libinput bluez usbutils i2c-tools wireshark-cli
               # general
               py hexyl xxd ripgrep jq yara file curl
-            ];
+            ]
+            # wimlib depends on syslinux, which is x86-only
+            ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [ pkgs.wimlib ];
             shellHook = ''
               export JAVA_HOME=${pkgs.jdk21}
               export GHIDRA_INSTALL_DIR=${pkgs.ghidra}/lib/ghidra
