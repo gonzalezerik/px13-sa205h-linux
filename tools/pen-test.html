@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pen test — stylus input measurement</title>
+<!--
+  Self-contained stylus measurement page. Run the identical file on Windows
+  (Edge) and Linux (any browser) and compare the exported JSON: event rate,
+  pressure range, tilt/azimuth, eraser and buttons, end to end through the
+  browser's Pointer Events stack. No external resources; works offline.
+-->
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1c1b1a; --muted: #5a574f;
+    --line: #c9c5bc; --accent: #0b57d0; --focus: #b3261e;
+    --ok: #1a5c2a; --warn: #8a4b08;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191817; --panel: #232220; --ink: #ece9e4; --muted: #b8b3a9;
+      --line: #4a4740; --accent: #8ab4f8; --focus: #f2b8b5;
+      --ok: #7dcc8b; --warn: #e3b341;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header, main { max-width: 1100px; margin: 0 auto; padding: 0.75rem 1rem; }
+  h1 { font-size: 1.4rem; margin: 0.5rem 0 0.25rem; }
+  p.lede { color: var(--muted); margin: 0 0 0.75rem; }
+  :is(a, button):focus-visible {
+    outline: 3px solid var(--focus); outline-offset: 2px;
+  }
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 0.6rem;
+  }
+  button {
+    font: inherit; min-height: 44px; min-width: 44px; padding: 0.4rem 1rem;
+    border: 2px solid var(--line); border-radius: 6px;
+    background: var(--panel); color: var(--ink); cursor: pointer;
+  }
+  button[aria-pressed="true"], button.primary {
+    border-color: var(--accent); color: var(--accent); font-weight: 600;
+  }
+  button:disabled { opacity: 0.45; cursor: default; }
+  #status { font-weight: 600; }
+  #status.rec { color: var(--ok); }
+  #status .dot { display: inline-block; width: 10px; height: 10px;
+    border: 2px solid currentColor; border-radius: 50%; margin-right: 4px; }
+  #status.rec .dot { background: currentColor; }
+  .cols { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
+  .cols > section { flex: 1 1 320px; min-width: 280px; }
+  section { background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 0.75rem 1rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+  canvas {
+    display: block; width: 100%; height: 340px; touch-action: none;
+    border: 2px solid var(--line); border-radius: 6px;
+    background: var(--panel);
+  }
+  .legend { color: var(--muted); font-size: 0.9rem; margin-top: 0.4rem; }
+  dl.stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 1rem;
+    margin: 0; font-variant-numeric: tabular-nums; }
+  dl.stats dt { color: var(--muted); }
+  dl.stats dd { margin: 0; text-align: right; }
+  #eventlog {
+    margin: 0; padding: 0.4rem 0.6rem; height: 200px; overflow-y: auto;
+    border: 1px solid var(--line); border-radius: 6px;
+    font: 0.85rem/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  #eventlog:focus-visible { outline: 3px solid var(--focus); }
+  footer { max-width: 1100px; margin: 0 auto; padding: 0.75rem 1rem 2rem;
+    color: var(--muted); font-size: 0.9rem; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pen test — stylus input measurement</h1>
+  <p class="lede">
+    Press <strong>Start</strong>, move the pen (hover, draw, tilt, eraser,
+    buttons), press <strong>Stop</strong>, then <strong>Export JSON</strong>.
+    The same file on Windows and Linux gives a direct end-to-end comparison.
+  </p>
+  <div class="toolbar" role="group" aria-label="Recording controls">
+    <button id="btn-record" class="primary" aria-pressed="false">Start</button>
+    <button id="btn-export" disabled>Export JSON</button>
+    <button id="btn-clear" disabled>Clear</button>
+    <span id="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span>Idle</span>
+  </div>
+</header>
+<main>
+  <div class="cols">
+    <section aria-labelledby="h-canvas">
+      <h2 id="h-canvas">Drawing surface</h2>
+      <canvas id="pad" width="1000" height="680" aria-hidden="true"></canvas>
+      <p class="legend">
+        Solid line = tip. Dashed line = eraser end. Dotted thick line = barrel
+        button held. Line width follows pressure.
+      </p>
+    </section>
+    <section aria-labelledby="h-stats">
+      <h2 id="h-stats">Live statistics</h2>
+      <dl class="stats" id="stats"></dl>
+    </section>
+  </div>
+  <div class="cols">
+    <section aria-labelledby="h-log" style="flex-basis:100%">
+      <h2 id="h-log">Event log</h2>
+      <div id="eventlog" tabindex="0" role="log" aria-label="Pen events"
+           aria-live="off"></div>
+    </section>
+  </div>
+</main>
+<footer>
+  Timestamps are milliseconds since recording start; each stroke and event also
+  carries a wall-clock time so captures can be aligned with external traces.
+  All data stays in this page; export downloads a JSON file locally.
+</footer>
+<script>
+"use strict";
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const pad = $("pad"), ctx = pad.getContext("2d");
+  const btnRec = $("btn-record"), btnExport = $("btn-export"),
+        btnClear = $("btn-clear"), statusEl = $("status"),
+        statsEl = $("stats"), logEl = $("eventlog");
+
+  // ---- capability detection (a finding in itself per platform) ----
+  const support = {
+    coalesced: typeof PointerEvent.prototype.getCoalescedEvents === "function",
+    rawupdate: "onpointerrawupdate" in window,
+    altitude: "altitudeAngle" in PointerEvent.prototype,
+    azimuth: "azimuthAngle" in PointerEvent.prototype,
+    twist: "twist" in PointerEvent.prototype,
+  };
+  const SAMPLE_EVENT = support.rawupdate ? "pointerrawupdate" : "pointermove";
+
+  let recording = false, t0 = 0, samples = [], events = [], strokes = [],
+      strokeById = new Map(), hoverCount = 0, touchCount = 0,
+      lastRateWindow = { t: 0, n: 0 }, rateHz = 0, sampleWindow = [];
+
+  const stats = {
+    samples: 0, penSamples: 0, minPressure: null, maxPressure: null,
+    contactMs: 0, minAltDeg: null, maxAltDeg: null,
+    minAzDeg: null, maxAzDeg: null, barrelEvents: 0, eraserEvents: 0,
+    pointerTypes: new Set(),
+  };
+
+  function fmt(v, unit, digits = 1) {
+    if (v === null || v === undefined) return "—";
+    return v.toFixed(digits) + (unit ? " " + unit : "");
+  }
+  function renderStats() {
+    const rows = [
+      ["Status", recording ? "recording" : "stopped"],
+      ["Sample source", SAMPLE_EVENT],
+      ["Sample rate (1 s window)", fmt(rateHz, "Hz")],
+      ["Pen samples", String(stats.penSamples)],
+      ["Hover samples (pressure 0)", String(hoverCount)],
+      ["Touch/finger samples", String(touchCount)],
+      ["Strokes", String(strokes.length)],
+      ["Contact time", fmt(stats.contactMs / 1000, "s")],
+      ["Pressure min / max",
+        fmt(stats.minPressure, "", 4) + " / " + fmt(stats.maxPressure, "", 4)],
+      ["Altitude min / max",
+        fmt(stats.minAltDeg, "°") + " / " + fmt(stats.maxAltDeg, "°")],
+      ["Azimuth min / max",
+        fmt(stats.minAzDeg, "°") + " / " + fmt(stats.maxAzDeg, "°")],
+      ["Barrel button edges", String(stats.barrelEvents)],
+      ["Eraser edges", String(stats.eraserEvents)],
+      ["Pointer types seen", [...stats.pointerTypes].join(", ") || "—"],
+      ["getCoalescedEvents", support.coalesced ? "yes" : "no"],
+      ["pointerrawupdate", support.rawupdate ? "yes" : "no"],
+      ["altitudeAngle", support.altitude ? "yes" : "no"],
+      ["azimuthAngle", support.azimuth ? "yes" : "no"],
+      ["twist", support.twist ? "yes" : "no"],
+    ];
+    statsEl.innerHTML = rows
+      .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  }
+  function logLine(text) {
+    const t = recording ? (performance.now() - t0).toFixed(1) : "0";
+    const line = `[${t.padStart(9)} ms] ${text}`;
+    events.push({ t: Number(t), wall: new Date().toISOString(), text });
+    logEl.textContent += line + "\n";
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStatus(text, rec) {
+    statusEl.innerHTML =
+      `<span class="dot" aria-hidden="true"></span>${text}`;
+    statusEl.classList.toggle("rec", !!rec);
+  }
+
+  // ---- canvas drawing ----
+  function fitCanvas() {
+    const r = pad.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    pad.width = Math.round(r.width * dpr);
+    pad.height = Math.round(r.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", fitCanvas);
+
+  function drawSeg(prev, e) {
+    const r = pad.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    const p = e.pressure || 0;
+    ctx.save();
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    const eraser = (e.buttons & 32) !== 0;
+    const barrel = (e.buttons & 2) !== 0;
+    ctx.strokeStyle = getComputedStyle(document.documentElement)
+      .getPropertyValue("--ink").trim() || "#000";
+    ctx.lineWidth = 1 + p * 11;
+    if (eraser) ctx.setLineDash([6, 6]);
+    else if (barrel) ctx.setLineDash([1, 7]);
+    ctx.beginPath();
+    ctx.moveTo(prev.x, prev.y); ctx.lineTo(x, y); ctx.stroke();
+    ctx.restore();
+    return { x, y };
+  }
+
+  // ---- sampling ----
+  function sampleFrom(e, coalesced) {
+    const t = performance.now() - t0;
+    const alt = support.altitude && e.altitudeAngle != null
+      ? e.altitudeAngle * 180 / Math.PI : null;
+    const az = support.azimuth && e.azimuthAngle != null
+      ? e.azimuthAngle * 180 / Math.PI : null;
+    const tw = support.twist && e.twist != null ? e.twist : null;
+    const s = [
+      Number(t.toFixed(3)), Math.round(e.clientX), Math.round(e.clientY),
+      Number(e.pressure.toFixed(4)),
+      alt === null ? null : Number(alt.toFixed(2)),
+      az === null ? null : Number(az.toFixed(2)),
+      tw === null ? null : Number(tw.toFixed(3)),
+      e.buttons, e.pointerType,
+    ];
+    samples.push(s);
+    stats.samples++;
+    sampleWindow.push(t);
+    if (e.pointerType === "pen") {
+      stats.penSamples++;
+      if (e.pressure > 0) {
+        if (stats.minPressure === null || e.pressure < stats.minPressure)
+          stats.minPressure = e.pressure;
+        if (stats.maxPressure === null || e.pressure > stats.maxPressure)
+          stats.maxPressure = e.pressure;
+      } else hoverCount++;
+      if (alt !== null) {
+        if (stats.minAltDeg === null || alt < stats.minAltDeg) stats.minAltDeg = alt;
+        if (stats.maxAltDeg === null || alt > stats.maxAltDeg) stats.maxAltDeg = alt;
+      }
+      if (az !== null) {
+        if (stats.minAzDeg === null || az < stats.minAzDeg) stats.minAzDeg = az;
+        if (stats.maxAzDeg === null || az > stats.maxAzDeg) stats.maxAzDeg = az;
+      }
+    } else if (e.pointerType === "touch") touchCount++;
+    stats.pointerTypes.add(e.pointerType);
+    return s;
+  }
+
+  function onPointerMove(e) {
+    if (!recording) return;
+    const evs = support.coalesced ? e.getCoalescedEvents() : [e];
+    const list = evs.length ? evs : [e];
+    const st = strokeById.get(e.pointerId);
+    for (const ev of list) {
+      sampleFrom(ev, ev !== e);
+      if (st && st.stroke.pointerType === "pen" && ev.pressure > 0) {
+        st.lastPos = drawSeg(st.lastPos, ev);
+      }
+    }
+    if (st) st.lastButtons = e.buttons;
+  }
+
+  function buttonsChanged(prev, cur) {
+    const edges = [];
+    if ((prev & 2) !== (cur & 2)) edges.push(cur & 2 ? "barrel-down" : "barrel-up");
+    if ((prev & 32) !== (cur & 32)) edges.push(cur & 32 ? "eraser-down" : "eraser-up");
+    return edges;
+  }
+
+  function onPointerDown(e) {
+    if (!recording) return;
+    pad.setPointerCapture?.(e.pointerId);
+    const stroke = {
+      strokeId: strokes.length, pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      startT: Number((performance.now() - t0).toFixed(1)),
+      startWall: new Date().toISOString(),
+      buttonsAtStart: e.buttons,
+    };
+    strokes.push(stroke);
+    const r = pad.getBoundingClientRect();
+    strokeById.set(e.pointerId, {
+      stroke, downT: performance.now(),
+      lastPos: { x: e.clientX - r.left, y: e.clientY - r.top },
+      lastButtons: e.buttons,
+    });
+    logLine(`down  id=${e.pointerId} type=${e.pointerType} p=${e.pressure.toFixed(3)} buttons=${e.buttons}`);
+  }
+
+  function onPointerUp(e) {
+    if (!recording) return;
+    const st = strokeById.get(e.pointerId);
+    if (!st) return;
+    st.stroke.endT = Number((performance.now() - t0).toFixed(1));
+    st.stroke.endWall = new Date().toISOString();
+    stats.contactMs += performance.now() - st.downT;
+    logLine(`up    id=${e.pointerId} duration=${(st.stroke.endT - st.stroke.startT).toFixed(0)} ms`);
+    strokeById.delete(e.pointerId);
+  }
+
+  const pointerBtn = new Map();
+  function onButtonsEdge(e) {
+    const prev = pointerBtn.has(e.pointerId) ? pointerBtn.get(e.pointerId) : e.buttons;
+    pointerBtn.set(e.pointerId, e.buttons);
+    for (const edge of buttonsChanged(prev, e.buttons)) {
+      logLine(`${edge.padEnd(11)} id=${e.pointerId} type=${e.pointerType}`);
+      if (edge.startsWith("barrel")) stats.barrelEvents++;
+      if (edge.startsWith("eraser")) stats.eraserEvents++;
+    }
+    const st = strokeById.get(e.pointerId);
+    if (st) st.lastButtons = e.buttons;
+  }
+
+  function onProximity(e) {
+    if (!recording) return;
+    logLine(`${e.type.padEnd(13)} id=${e.pointerId} type=${e.pointerType}`);
+  }
+
+  const handlers = [
+    [pad, SAMPLE_EVENT, onPointerMove],
+    [pad, "pointerdown", (e) => { onPointerDown(e); onButtonsEdge(e); }],
+    [pad, "pointermove", onButtonsEdge],
+    [pad, "pointerup", onPointerUp],
+    [pad, "pointercancel", onPointerUp],
+    [pad, "pointerenter", onProximity],
+    [pad, "pointerleave", onProximity],
+  ];
+
+  // ---- rate ticker ----
+  let ticker = null;
+  function tick() {
+    const now = performance.now() - t0;
+    sampleWindow = sampleWindow.filter(t => t > now - 1000);
+    rateHz = sampleWindow.length;
+    renderStats();
+  }
+
+  // ---- controls ----
+  btnRec.addEventListener("click", () => {
+    recording = !recording;
+    if (recording) {
+      if (samples.length === 0) t0 = performance.now();
+      btnRec.textContent = "Stop";
+      btnRec.setAttribute("aria-pressed", "true");
+      setStatus("Recording", true);
+      logLine("=== recording started ===");
+      ticker = setInterval(tick, 500);
+    } else {
+      clearInterval(ticker);
+      btnRec.textContent = "Start";
+      btnRec.setAttribute("aria-pressed", "false");
+      setStatus("Stopped", false);
+      logLine("=== recording stopped ===");
+      renderStats();
+    }
+    btnExport.disabled = samples.length === 0;
+    btnClear.disabled = samples.length === 0;
+  });
+
+  btnClear.addEventListener("click", () => {
+    samples = []; events = []; strokes = []; hoverCount = 0; touchCount = 0;
+    Object.assign(stats, {
+      samples: 0, penSamples: 0, minPressure: null, maxPressure: null,
+      contactMs: 0, minAltDeg: null, maxAltDeg: null, minAzDeg: null,
+      maxAzDeg: null, barrelEvents: 0, eraserEvents: 0,
+      pointerTypes: new Set(),
+    });
+    sampleWindow = []; rateHz = 0;
+    logEl.textContent = "";
+    ctx.clearRect(0, 0, pad.width, pad.height);
+    btnExport.disabled = true; btnClear.disabled = true;
+    renderStats();
+  });
+
+  btnExport.addEventListener("click", () => {
+    const data = {
+      meta: {
+        tool: "mpp-linux pen-test", version: 1,
+        ua: navigator.userAgent,
+        screen: { w: screen.width, h: screen.height, dpr: devicePixelRatio },
+        exported: new Date().toISOString(),
+        sampleEvent: SAMPLE_EVENT, support,
+      },
+      stats: {
+        ...stats, pointerTypes: [...stats.pointerTypes],
+        hoverSamples: hoverCount, touchSamples: touchCount,
+      },
+      strokes,
+      samples, events,
+    };
+    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "pen-test-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    logLine(`exported ${samples.length} samples, ${strokes.length} strokes`);
+  });
+
+  for (const [el, ev, fn] of handlers) el.addEventListener(ev, fn);
+
+  fitCanvas();
+  renderStats();
+  logLine(`page loaded; coalesced=${support.coalesced} rawupdate=${support.rawupdate} alt=${support.altitude} az=${support.azimuth}`);
+})();
+</script>
+</body>
+</html>
