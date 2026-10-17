@@ -12,3 +12,7 @@
 /result
 /result-*
 /.direnv/
+
+# Python bytecode from tools/*.py
+__pycache__/
+*.pyc
