@@ -153,3 +153,22 @@ visible focus; accessible names on every control; 4.5:1 contrast in both themes;
 layouts survive 200 % text scale; respect reduce-motion; 24×24 px minimum targets;
 every haptic cue has a visual or audible equivalent. A UI change merges only with
 its automated AT-SPI2 check present and green.
+
+## 10. Upstream contributions
+
+Parts of this work belong upstream: the Linux kernel (HID haptics for pens, HID-BPF quirks),
+BlueZ, libinput and Wayland protocols. Anything sent upstream follows **that project's own rules
+in full**, not this file's.
+
+For the kernel, read the current versions of `Documentation/process/` before drafting:
+`submitting-patches`, `development-process`, `coding-style`, `submit-checklist`,
+`coding-assistants` and `email-clients`, plus the HID maintainers' notes and `MAINTAINERS`. In
+short: one logical, bisectable change per patch; kernel coding style; `checkpatch.pl --strict`
+clean; no new `W=1`/sparse warnings; HID selftests for new behaviour; tested on real hardware;
+subjects like `HID: haptic: …`; recipients from `get_maintainer.pl`; RFC to linux-input first.
+
+**AI assistance is disclosed honestly wherever the upstream asks for it.** The kernel requires an
+`Assisted-by:` tag on AI-assisted patches and forbids AI-added `Signed-off-by`
+(`Documentation/process/coding-assistants.rst`). The human who signs off must have reviewed and
+understood every line, and sends the patch. Drafts live in `upstream/` with a review brief for
+each patch.
