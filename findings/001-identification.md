@@ -42,9 +42,11 @@ Key facts (own words; details → docs/protocol/haptics-bt.md later):
   the BT stylus collection so Windows correlates them; mandatory for haptics and multi-pen. [DOC]
 - Capability discovery: host GETs a **feature report** with **Waveform List (0x0E/0x10)** and
   **Duration List (0x0E/0x11)**, ordinal-indexed (ordinal page 0x0A, usages ≥3; 1=None, 2=Stop implicit).
-  Waveform IDs 0x1001..0x1015: Click, Press/Release, Hover, Success/Error, InkContinuous
-  (mandatory fallback for inking), Pencil/Marker/ChiselMarker/Brush/Eraser/SparkleContinuous,
-  Collide, Align, Step, Grow. Continuous waveforms have duration 0 (play until stopped/cutoff). [DOC]
+  Waveform IDs (exact table in docs/protocol/haptics.md §1): 0x1001 None, 0x1002 Stop,
+  0x1003 Click, 0x1006 Press, 0x1007 Release, 0x1008 Hover, 0x1009 Success, 0x100A Error,
+  0x100B InkContinuous (mandatory inking fallback), 0x100C–0x1011 Pencil/Marker/ChiselMarker/
+  BrushContinuous…, 0x1012 Collide, 0x1013 Align, 0x1014 Step, 0x1015 Grow; 0x1004/0x1005
+  unassigned. Continuous waveforms have duration 0 (play until stopped/cutoff). [DOC]
 - Playback: one **output report** — **Manual Trigger 0x0E/0x21** (an *ordinal*), plus optional
   **Intensity 0x23** (0–100 %), **Repeat Count 0x24**, **Retrigger Period 0x25** (ms),
   **Waveform Cutoff Time 0x28** (ms). **Windows never uses Auto Trigger**: discrete waveforms play
