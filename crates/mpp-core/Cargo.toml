@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "mpp-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Protocol types for MPP 2.6 pens: digitizer reports, pairing and haptics"
+
+[lints]
+workspace = true

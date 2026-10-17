@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# cargo-deny configuration: license policy (AGPL-3.0-or-later project; see
+# CONTRIBUTING.md §5), duplicate crates, and vulnerability advisories.
+# Schema for cargo-deny 0.20.
+
+[advisories]
+db-urls = ["https://github.com/RustSec/advisory-db"]
+
+[licenses]
+# Licenses compatible with our AGPL-3.0-or-later project, matching the
+# reuse table in CONTRIBUTING.md §5. Anything not listed fails the check.
+allow = [
+    "AGPL-3.0-or-later",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

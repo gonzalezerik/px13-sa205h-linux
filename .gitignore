@@ -1,0 +1,14 @@
+# Local capture output (hid-recorder, btmon, Windows traces): personal data, never committed.
+/captures
+
+# Windows binaries we analyse: not ours to redistribute. Fetch with tools/fetch-artifacts.sh.
+/artifacts/
+
+# Local privacy denylist (one regex per line), never committed.
+/.privacy-denylist
+
+# Rust / Nix
+/target/
+/result
+/result-*
+/.direnv/

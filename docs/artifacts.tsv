@@ -1,0 +1,6 @@
+# Windows-side files the reverse engineering reads. Never committed (artifacts/ is ignored);
+# fetch them with tools/fetch-artifacts.sh. Columns: path<TAB>sha256<TAB>url
+windows/win11-25h2-26200.8873-consumer-x64-en-us.esd	e4c251a99eeade29aa5d462047bcb257d640cd2c98dfb7a2305f45876d1790c1	http://dl.delivery.mp.microsoft.com/filestreamingservice/files/0f68e999-6e25-4ae7-92db-23cbb3a723a9/26200.8873.260710-2020.25h2_ge_release_svc_refresh_CLIENTCONSUMER_RET_x64FRE_en-us.esd
+asus/SeamlessPairing_DCH_ELAN_Z_V1.2.2.4_46362.exe	3a627fdfe32bf29396b25e7a8bda81226518d21971703973f482e811f97cd70f	https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/PointingDevice/46362/SeamlessPairing_DCH_ELAN_Z_V1.2.2.4_46362.exe
+asus/WoT_DCH_ELAN_Z_V1.0.1.16_46783.exe	a48215b585cb95816d15e0d22f7f873994c1b1d81e25638fbc41f8651b36a9a0	https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/PointingDevice/46783/WoT_DCH_ELAN_Z_V1.0.1.16_46783.exe
+asus/PrecisionTouchPadDialPad_ASUS_Z_V24.0.0.21_48289.exe	af6d48eda63c1b2ba91a73b3454c5701057c52af3a798861c365914a6af5c2bf	https://dlcdnets.asus.com/pub/ASUS/nb/Image/Driver/PointingDevice/48289/PrecisionTouchPadDialPad_ASUS_Z_V24.0.0.21_48289.exe

@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # glibc and musl are equal targets: the same Containerfile stages (fmt, clippy,
+  # test, release build) run for both, natively on x86_64 and aarch64 runners.
+  build:
+    name: ${{ matrix.libc }} / ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        libc: [glibc, musl]
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - name: podman
+        run: command -v podman || (sudo apt-get update && sudo apt-get install -y podman)
+      - name: test stage (fmt, clippy, tests)
+        run: podman build -f container/Containerfile.${{ matrix.libc }} --target test .
+      - name: runtime image
+        run: |
+          podman build -f container/Containerfile.${{ matrix.libc }} -t mpp-linux:${{ matrix.libc }} .
+          podman run --rm mpp-linux:${{ matrix.libc }} --version
+
+  nix:
+    name: nix / ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - run: nix flake check -L
+
+  deny:
+    name: cargo-deny (licenses, advisories)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  privacy:
+    name: privacy gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: ./tools/privacy/check.sh
+
+  a11y:
+    name: accessibility gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: ./tools/a11y/check.sh

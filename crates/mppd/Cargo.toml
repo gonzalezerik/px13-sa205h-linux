@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "mppd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Daemon for MPP 2.6 pens: pairing, haptics, battery, buttons"
+
+[dependencies]
+mpp-core = { path = "../mpp-core" }
+
+[lints]
+workspace = true

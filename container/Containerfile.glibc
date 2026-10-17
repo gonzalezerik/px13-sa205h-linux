@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# glibc build: Debian trixie. Same stages as Containerfile.musl; CI builds both on
+# x86_64 and aarch64 (native runners, no emulation).
+#   podman build -f container/Containerfile.glibc -t mpp-linux:glibc .
+#   podman build -f container/Containerfile.glibc --target test .
+ARG RUST_IMAGE=docker.io/library/rust:1.99.1-trixie
+ARG RUNTIME_IMAGE=docker.io/library/debian:trixie-slim
+
+FROM ${RUST_IMAGE} AS build
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN cargo build --release --locked --workspace
+
+FROM build AS test
+RUN rustup component add clippy rustfmt \
+ && cargo fmt --all --check \
+ && cargo clippy --locked --workspace --all-targets -- -D warnings \
+ && cargo test --locked --workspace
+
+FROM ${RUNTIME_IMAGE} AS runtime
+COPY --from=build /src/target/release/mppd /src/target/release/mppctl /usr/local/bin/
+ENTRYPOINT ["/usr/local/bin/mppd"]
