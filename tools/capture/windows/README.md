@@ -6,62 +6,74 @@ instead of guesses: what is sent to the digitizer at boot, the real report
 rate and pressure behaviour, the tap-to-pair flow, the haptics host, and where
 the settings live.
 
-**Run all of this from a Windows To Go USB SSD. Never boot Windows from (or
-into) the laptop's internal disk.** Everything you capture is personal (device
-identifiers, Bluetooth link keys): keep the stick and the capture folder
-private.
+**This runs on the laptop's own dual-boot Windows install** (Windows 11 Pro
+25H2, `nvme0n1p3`, booted from the left rEFInd entry or the ASUS boot menu).
+The machine is already set up: the AMD/MediaTek/ELAN/DialPad **drivers** are
+installed, no ASUS apps or services are, and Windows was configured offline
+before the first boot (Defender/SmartScreen off, telemetry minimal, no driver
+or firmware offers from Windows Update, BitLocker blocked, hibernation off,
+clock in UTC). Do not undo any of that during a session.
+
+Everything you capture is personal (device identifiers, Bluetooth link keys):
+the import step copies it into `captures/windows/`, which is gitignored — keep
+it that way.
 
 ## Safety — read before the first boot
 
-- **Local account only.** A Microsoft account pulls in BitLocker device
-  encryption and sync; a plain local account avoids both.
-- **Stop firmware before anything else.** Windows Update and the ASUS apps can
-  push **BIOS, ELAN digitizer and pen firmware**. A BIOS update resets custom
-  firmware settings (memory carve-outs included). Before the first network
-  connection:
-  1. Settings → Windows Update → Advanced options → turn **off** “Receive
-     updates for other Microsoft products” and get the optional/driver
-     offers off.
-  2. Pause updates (5 weeks).
-  3. In MyASUS / ProArt Creator Hub / ScreenXpert, **decline every firmware or
-     driver offer**. Never accept a firmware update from any of them.
-- **Never run firmware updaters** (ELAN or otherwise), even if offered.
-- Windows sets the hardware clock to local time; the Linux install fixes it
-  back via NTP on first boot. Cosmetic, but expect a wrong clock on the first
-  Linux boot after a Windows session.
-- The capture stick holds Bluetooth link keys and pen serials. Treat it like a
-  password.
+- **Decline every firmware or BIOS offer, everywhere** — Windows Update, Device
+  Manager, and any app dialog. A BIOS update resets custom firmware settings
+  (the memory carve-out included). Never run a firmware updater, ELAN or
+  otherwise.
+- **Don't sign in with a Microsoft account.** The local account is set up; a
+  Microsoft account pulls in BitLocker device encryption and sync.
+- **Don't re-enable Defender, SmartScreen, driver updates or hibernation.**
+  Hibernation staying off is what lets Linux read the NTFS partition.
+- The hardware clock is UTC; Windows may switch it to local time when it
+  boots. If the clock looks wrong on the next Linux boot, that's why — NTP
+  fixes it. Timestamps inside Windows sessions come from Windows itself and
+  stay consistent with the traces.
+- The capture folder holds Bluetooth link keys and pen serials. Treat it like
+  a password.
 
-## What to copy onto the stick (before first boot)
+## What to copy to Windows (before the first session)
+
+Copy these into `C:\kit\` on the Windows partition — from NixOS with the
+partition mounted read-write, or via a FAT/exFAT USB stick:
 
 | Item | Where it goes |
 |---|---|
 | This folder (`tools/capture/windows/`) | `C:\kit\` |
 | `tools/pen-test.html` | `C:\kit\pen-test.html` |
 | The three trace files (see [Pinned trace files](#pinned-trace-files)), downloaded and hash-checked | `C:\kit\` |
-| Sysinternals Process Monitor (`Procmon64.exe`) | `C:\kit\` |
-| Windows Performance Analyzer (optional, or install later on the stick) | — |
+| Sysinternals Process Monitor (`Procmon64.exe`, from learn.microsoft.com/en-us/sysinternals/downloads/procmon) | `C:\kit\` |
+| Microsoft Whiteboard (only needed for session 4; install from the Microsoft Store) | — |
+
+Nothing else needs installing. All commands run in an **elevated** Command
+Prompt (Start → `cmd` → Run as administrator).
+
+## Session log
 
 Create the capture tree and start a log in **every** session:
 
 ```bat
-mkdir C:\captures
+mkdir C:\mpp-captures
 cd /d C:\kit
 log "capture kit ready"
 ```
 
-`log.cmd` appends an ISO-8601 wall-clock line to `C:\captures\session-log.txt`.
-Timestamp **before and after every physical action** (pen touch, button press,
-slider move) so the traces can be lined up with what you did. All commands run
-in an **elevated** Command Prompt (Start → `cmd` → Run as administrator).
+`log.cmd` appends an ISO-8601 wall-clock line to
+`C:\mpp-captures\session-log.txt`. Timestamp **before and after every physical
+action** (pen touch, button press, slider move) so the traces can be lined up
+with what you did. Each session writes into its own folder
+`C:\mpp-captures\<NN-name>\`.
 
-## Session 0 — inventory
+## Session 00 — inventory
 
 Answers: which drivers own the pen/digitizer, and where their settings are.
 
 ```bat
-mkdir C:\captures\s0-inventory
-cd /d C:\captures\s0-inventory
+mkdir C:\mpp-captures\00-inventory
+cd /d C:\mpp-captures\00-inventory
 pnputil /enum-devices /connected /drivers > pnputil-connected.txt
 pnputil /enum-drivers > pnputil-drivers.txt
 mkdir drivers
@@ -81,22 +93,21 @@ Then screenshots (Win+Shift+S, save into the session folder) of:
 
 - Settings → Bluetooth & devices → Pen & Windows Ink (every sub-page,
   including anything haptics- or pressure-related),
-- the pen pages in MyASUS, ProArt Creator Hub, ScreenXpert (if present),
 - Device Manager: the digitizer (Human Interface Devices), the pen devices,
   and the Bluetooth pen entries if paired — Details tab → “Device instance
   path” for each.
 
-## Session 1 — boot trace: what Windows sends to the digitizer
+## Session 01 — boot trace: what Windows sends to the digitizer
 
-Answers parity item “digitizer configuration”: every feature report / bus
+Answers the “digitizer configuration” parity item: every feature report / bus
 transfer Windows performs at startup, to compare with what `hid-multitouch`
 sends at probe on Linux.
 
 ```bat
-mkdir C:\captures\s1-boot && cd /d C:\captures\s1-boot
+mkdir C:\mpp-captures\01-boot && cd /d C:\mpp-captures\01-boot
 copy C:\kit\BusesAllProfile.wprp .
 copy C:\kit\SpbCxWppTrace.cmd .
-log "s1: registering boot traces"
+log "s01: registering boot traces"
 wpr -start BusesAllProfile.wprp!InputOnlyProfile.Verbose.File -start
 SpbCxWppTrace.cmd start autologger
 shutdown /r /t 0
@@ -106,34 +117,33 @@ After Windows comes back: log in, **do not touch the pen for 2 minutes**
 (boot-time traffic only), then:
 
 ```bat
-cd /d C:\captures\s1-boot
-log "s1: post-boot baseline done; now hover + one slow line"
+cd /d C:\mpp-captures\01-boot
+log "s01: post-boot baseline done; now hover + one slow line"
 (timeout 120)
 ```
 
 Hover the pen over the screen for ~5 s, draw one slow line, then:
 
 ```bat
-log "s1: stopping boot traces"
-wpr -stop C:\captures\s1-boot\boot-input.etl
+log "s01: stopping boot traces"
+wpr -stop C:\mpp-captures\01-boot\boot-input.etl
 SpbCxWppTrace.cmd stop autologger
-copy C:\PerfLogs\Admin\SpbCxWpp_Session\*.etl C:\captures\s1-boot\
+copy C:\PerfLogs\Admin\SpbCxWpp_Session\*.etl C:\mpp-captures\01-boot\
 ```
 
 If `wpr -start … -start` rejects the profile, fall back to
 `usb/tracing/BusesTrace.cmd` from the same pinned repo (same bus providers,
 built-in boot-trace mode) and note it in the session log.
 
-## Session 2 — inking quality
+## Session 02 — inking quality
 
 Answers: report rate, jitter, pressure range, tilt/azimuth, eraser — measured
 end-to-end through the same page we will run on Linux.
 
 ```bat
-mkdir C:\captures\s2-inking && cd /d C:\captures\s2-inking
-cd /d C:\captures\s2-inking
+mkdir C:\mpp-captures\02-inking && cd /d C:\mpp-captures\02-inking
 wpr -start BusesAllProfile.wprp!InputOnlyProfile.Verbose.File
-log "s2: input trace started"
+log "s02: input trace started"
 ```
 
 Open `C:\kit\pen-test.html` in Edge, press **Start** in the page, then perform,
@@ -150,29 +160,32 @@ with a `log` line before each:
 9. slow straight line, top to bottom, 5 s
 
 Press **Stop** in the page, **Export JSON** → save as
-`pen-test-s2.json` in the session folder, then:
+`pen-test-s02.json` in the session folder, then:
 
 ```bat
-wpr -stop C:\captures\s2-inking\input.etl
-log "s2: done"
+wpr -stop C:\mpp-captures\02-inking\input.etl
+log "s02: done"
 ```
 
 Also open Settings → Bluetooth & devices → Pen & Windows Ink and run any
 built-in pen test/preview it offers while the trace is still running, if the
 page was not already open.
 
-## Session 3 — first tap-to-pair
+## Session 03 — first tap-to-pair (the priority)
 
 Answers: the seamless-pairing flow end to end (which side initiates, what the
 digitizer and the pen exchange over Bluetooth, what Windows does with it).
+This is the decisive evidence for the pairing protocol write-up.
 
-First **remove the pen from Windows' paired devices**: Settings → Bluetooth &
-devices → the pen → Remove device. Then:
+The pen has **never been paired with this Windows install**, so the first
+touch is the real first pairing. (If a later session already paired it —
+Settings → Bluetooth & devices shows the pen — remove it first and say so in
+the log.)
 
 ```bat
-mkdir C:\captures\s3-pairing && cd /d C:\captures\s3-pairing
+mkdir C:\mpp-captures\03-pairing && cd /d C:\mpp-captures\03-pairing
 wpr -start BluetoothStack.wprp!BluetoothStack.Verbose.File BusesAllProfile.wprp!InputOnlyProfile.Verbose.File
-log "s3: traces started, pen removed from BT list"
+log "s03: traces started, pen not paired"
 ```
 
 Touch the pen tip to the screen (the ASUS seamless-pairing gesture), wait for
@@ -181,25 +194,28 @@ pairs within 60 s, hover the pen near the top edge and try again; log every
 attempt:
 
 ```bat
-log "s3: tap-to-pair attempt 1"
+log "s03: tap-to-pair attempt 1"
 ...
-log "s3: paired (or: failed after N attempts)"
-wpr -stop C:\captures\s3-pairing\pair.etl
-pnputil /enum-devices /connected /class HID > hid-after.txt
+log "s03: paired (or: failed after N attempts)"
 ```
 
 Screenshot the pen's entry in Settings → Bluetooth & devices (its advertised
-name) before stopping the trace.
+name), then:
 
-## Session 4 — haptics
+```bat
+wpr -stop C:\mpp-captures\03-pairing\pair.etl
+pnputil /enum-devices /connected /class HID > hid-after.txt
+```
+
+## Session 04 — haptics
 
 Answers: when the haptics host triggers, what intensity/on-off map to, which
 apps get haptic ink.
 
 ```bat
-mkdir C:\captures\s4-haptics && cd /d C:\captures\s4-haptics
+mkdir C:\mpp-captures\04-haptics && cd /d C:\mpp-captures\04-haptics
 wpr -start BusesAllProfile.wprp!InputOnlyProfile.Verbose.File
-log "s4: trace started"
+log "s04: trace started"
 ```
 
 With the pen paired over Bluetooth:
@@ -212,70 +228,84 @@ With the pen paired over Bluetooth:
 3. Press/release the barrel button and the top button while drawing.
 
 ```bat
-wpr -stop C:\captures\s4-haptics\haptics.etl
-log "s4: done"
+wpr -stop C:\mpp-captures\04-haptics\haptics.etl
+log "s04: done"
 ```
 
-## Session 5 — top and barrel buttons
+## Session 05 — top and barrel buttons
 
 Answers: what the buttons send over Bluetooth HID (single/double/long press)
 and what Windows turns them into.
 
 ```bat
-mkdir C:\captures\s5-buttons && cd /d C:\captures\s5-buttons
+mkdir C:\mpp-captures\05-buttons && cd /d C:\mpp-captures\05-buttons
 wpr -start BusesAllProfile.wprp!InputOnlyProfile.Verbose.File
-log "s5: trace started"
+log "s05: trace started"
 ```
 
 On the desktop, one action at a time, `log` before each, 3 s gap between:
 
-- top button: single press ×3, double press ×3, long press (≥1 s) ×3
+- top button: single press ×3, double press ×3, long press (≥ 1 s) ×3
 - barrel button: same nine presses
 - note on screen what each one did (screenshot the result of each kind once)
 
 ```bat
-wpr -stop C:\captures\s5-buttons\buttons.etl
-log "s5: done"
+wpr -stop C:\mpp-captures\05-buttons\buttons.etl
+log "s05: done"
 ```
 
-## Session 6 — ASUS app pen settings
+## Session 06 — ASUS app pen settings (only when needed)
 
-Answers: which registry/file keys each ASUS pen setting writes.
+Answers: which registry/file keys each ASUS pen setting writes. **Skip this
+session until the app that actually holds the pen settings is known** — the
+inbox Settings pages may be all there is. If it runs, install that one app
+first and decline every firmware offer it makes.
 
 Start `Procmon64.exe` (accept the EULA), Filter → filter to
-`Process Name` `contains` `ASUS` **or** `CreatorHub` **or** `ScreenXpert`
-(add the exact process names you see), `Operation` `is` `RegSetValue`, plus a
-second include rule `RegCreateKey`. File system writes from the same processes
-too (`RegIO` and `filesystem`).
+`Process Name` `contains` `ASUS` **or** the app's own process names (add the
+exact names you see), `Operation` `is` `RegSetValue`, plus a second include
+rule `RegCreateKey`. File system writes from the same processes too.
 
 ```bat
-mkdir C:\captures\s6-appsettings && cd /d C:\captures\s6-appsettings
+mkdir C:\mpp-captures\06-appsettings && cd /d C:\mpp-captures\06-appsettings
 reg export HKCU\SOFTWARE reg-hkcu-before.reg /y
-log "s6: procmon running, baseline exported"
+log "s06: procmon running, baseline exported"
 ```
 
-In each app, change **one pen setting at a time** (button remap, pressure,
+In the app, change **one pen setting at a time** (button remap, pressure,
 haptics, handedness, anything pen-related you find), `log` each change, wait
 2 s, then set it back. Export Procmon as PML **and** CSV into the session
-folder per app. Finish with:
+folder. Finish with:
 
 ```bat
 reg export HKCU\SOFTWARE reg-hkcu-after.reg /y
-log "s6: done"
+log "s06: done"
 ```
+
+## Importing back to Linux
+
+Reboot into NixOS and run, from the repo root:
+
+```
+sudo tools/capture/import-windows.sh
+```
+
+It mounts the Windows partition read-only, copies `C:\mpp-captures\*` into
+`captures/windows/`, writes a SHA-256 manifest, and unmounts.
 
 ## Decoding the captures
 
-- `.etl` from `wpr`: on Windows, `tracerpt file.etl -of csv -o csvdir\ -y`
-  gives CSVs that read fine on Linux. WPP providers (the SPB/I2C trace) need
-  symbol/TMF lookup: set `_NT_SYMBOL_PATH=srv*C:\symbols*https://msdl.microsoft.com/download/symbols`
+- `.etl` from `wpr`: decode **in the same Windows session** — on the laptop,
+  `tracerpt file.etl -of csv -o <name>-csv\ -y` gives CSVs that read fine on
+  Linux. WPP providers (the SPB/I2C trace) need symbol lookup: set
+  `_NT_SYMBOL_PATH=srv*C:\symbols*https://msdl.microsoft.com/download/symbols`
   before `tracerpt`. Windows Performance Analyzer (WPA) opens the ETLs
   directly and is the better tool for the HID input events.
 - On Linux there is no reliable decoder for these ETLs (WPP needs Microsoft
-  TMFs). Decode on the stick, keep the raw ETLs as evidence.
+  TMFs), so anything not decoded on Windows stays raw evidence.
 - Procmon `.pml` files open in Procmon on Windows; export CSV for Linux-side
   diffing.
-- `pen-test-s2.json` is already Linux-readable — diff it against the same page
+- `pen-test-s02.json` is already Linux-readable — diff it against the same page
   run on Linux (same file, `tools/pen-test.html`).
 
 ## Pinned trace files
