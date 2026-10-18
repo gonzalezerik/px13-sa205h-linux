@@ -11,7 +11,8 @@
 //! through BlueZ; `watch-buttons` dumps the pen's raw evdev events so the
 //! top-button codes can be identified. `haptic` plays one effect with
 //! the single output report 0x41 and writes nothing unless `--send` is
-//! given.
+//! given. `serve` exports the D-Bus interface of docs/dbus.md: a Daemon
+//! object, one object per pen BlueZ knows, and the pairing listener.
 
 use std::collections::HashMap;
 use std::process::ExitCode;
@@ -20,6 +21,7 @@ use std::time::Instant;
 mod buttons;
 mod haptics;
 mod presence;
+mod service;
 
 use hidapi::{DeviceInfo, HidApi};
 use opp_core::seamless;
@@ -57,6 +59,10 @@ commands:
       --retrigger-ms N  milliseconds between repeats (default 0)
       --path PATH     pen hidraw node (default: the only pen-named HID)
       --send          write the report to the pen
+  serve                 export the D-Bus interface (docs/dbus.md): the Daemon
+                      object plus one per known pen, on the session bus
+      --system        export on the system bus instead
+      --adapter NAME  BlueZ adapter to read pens from (default: hci0)
   -h, --help          print this help
   -V, --version       print the version
 ";
@@ -83,6 +89,7 @@ fn main() -> ExitCode {
         },
         Some("watch-buttons") => buttons::watch_buttons(args.iter().any(|arg| arg == "--list")),
         Some("haptic") => haptics::haptic(&args),
+        Some("serve") => service::serve(&args),
         Some("-h") | Some("--help") => {
             print!("{USAGE}");
             Ok(())

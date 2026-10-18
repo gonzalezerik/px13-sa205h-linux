@@ -152,7 +152,7 @@ async fn print_initial_state(props: &Proxy<'_>, pen_path: &str) -> Result<(), St
 
 /// BlueZ exposes the battery percentage as a byte or int16 depending on
 /// the version; accept both.
-fn as_percent(value: &OwnedVariant) -> Option<u8> {
+pub(crate) fn as_percent(value: &OwnedVariant) -> Option<u8> {
     if let Ok(byte) = value.downcast_ref::<u8>() {
         return Some(byte);
     }

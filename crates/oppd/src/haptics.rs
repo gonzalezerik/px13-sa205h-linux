@@ -123,7 +123,7 @@ fn parse(args: &[String]) -> Result<Command, String> {
 
 /// Write the report to the pen's HID node (uhid names it after the
 /// GATT name, so "pen" is in it; the digitizer is excluded by id).
-fn send_to_pen(path: Option<&str>, report: &[u8]) -> Result<(), String> {
+pub(crate) fn send_to_pen(path: Option<&str>, report: &[u8]) -> Result<(), String> {
     let api = HidApi::new().map_err(|error| format!("cannot open the HID subsystem: {error}"))?;
     let (open, node_name) = match path {
         Some(explicit) => {
