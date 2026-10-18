@@ -1,73 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The JSON contract of `oppctl`, described in docs/oppctl.md.
 //!
-//! Pure serialisation: the rules frontends rely on — empty output while
-//! no pen is connected, `-1` battery as `null`, the tags of the `watch`
-//! stream — live here and are tested here, away from the bus.
+//! Pure serialisation: the pen shapes come from `opp-client`, and the
+//! rules frontends rely on — empty output while no pen is connected,
+//! an unreported battery as `null`, the tags of the `watch` stream —
+//! live here and are tested here, away from the bus.
 
+use opp_client::Pen;
 use serde::Serialize;
-
-/// One pen: `status --json` prints these, and `watch` carries them in
-/// its `snapshot`, `pen.added` and `pen.changed` events.
-#[derive(Clone, Serialize)]
-pub struct Pen {
-    pub path: String,
-    pub name: String,
-    pub address: String,
-    pub present: bool,
-    pub paired: bool,
-    pub trusted: bool,
-    pub battery: Option<i32>,
-    pub haptics: Option<Haptics>,
-    pub capabilities: Option<Capabilities>,
-}
-
-/// The pen's `Haptics1` policy state; `null` when the pen does no haptics.
-#[derive(Clone, Serialize)]
-pub struct Haptics {
-    pub enabled: bool,
-    pub intensity: u8,
-}
-
-/// The capability dict projected to JSON. A key absent from the dict is
-/// absent here too — that is the daemon's "this pen lacks it" statement
-/// (docs/dbus.md §6), so unknown keys are dropped rather than guessed at.
-#[derive(Clone, Default, Serialize)]
-pub struct Capabilities {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pairing: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub battery: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub buttons: Option<Buttons>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub haptics: Option<CapabilityHaptics>,
-}
-
-#[derive(Clone, Default, Serialize)]
-pub struct Buttons {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub barrel: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shortcut: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shortcut_gestures: Option<Vec<String>>,
-}
-
-#[derive(Clone, Default, Serialize)]
-pub struct CapabilityHaptics {
-    pub waveforms: Vec<Waveform>,
-}
-
-/// One playable waveform: the `(ordinal, name, duration_ms, continuous)`
-/// tuple of the capability dict, spread into named fields.
-#[derive(Clone, Serialize)]
-pub struct Waveform {
-    pub ordinal: u16,
-    pub name: String,
-    pub duration_ms: u16,
-    pub continuous: bool,
-}
 
 /// One `watch` record: serialised as one compact line of JSON.
 #[derive(Clone, Serialize)]
@@ -125,38 +65,10 @@ pub fn status_line(pen: &Pen) -> String {
     format!("{}  {battery}{link}", pen.name)
 }
 
-/// `BatteryPercent` is `-1` until the battery service has reported one;
-/// JSON says `null` rather than passing a magic number through.
-pub fn battery_from_wire(percent: i32) -> Option<i32> {
-    if percent < 0 { None } else { Some(percent) }
-}
-
-/// The address embedded in a `dev_XX_XX_XX_XX_XX_XX` object path, in the
-/// `Pen1.Address` form: upper-case hex, colon-separated. Empty when the
-/// path carries no address — `pen.removed` then still has the path.
-pub fn address_from_object_path(path: &str) -> String {
-    let basename = path.rsplit_once('/').map_or(path, |(_, leaf)| leaf);
-    let Some(hex) = basename.strip_prefix("dev_") else {
-        return String::new();
-    };
-    let bytes: Vec<&str> = hex.split('_').collect();
-    let well_formed = bytes.len() == 6
-        && bytes
-            .iter()
-            .all(|byte| byte.len() == 2 && byte.chars().all(|c| c.is_ascii_hexdigit()));
-    if !well_formed {
-        return String::new();
-    }
-    bytes
-        .iter()
-        .map(|byte| byte.to_uppercase())
-        .collect::<Vec<_>>()
-        .join(":")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use opp_client::{Capabilities, CapabilityHaptics, Waveform};
 
     fn pen(suffix: &str, present: bool, battery: Option<i32>) -> Pen {
         Pen {
@@ -186,10 +98,7 @@ mod tests {
     }
 
     #[test]
-    fn battery_minus_one_becomes_null() {
-        assert_eq!(battery_from_wire(-1), None);
-        assert_eq!(battery_from_wire(0), Some(0));
-        assert_eq!(battery_from_wire(100), Some(100));
+    fn an_unreported_battery_is_null() {
         let line = status_json(&[pen("0a_0b_0c_0d_0e_0f", true, None)]).expect("one pen");
         assert!(parse(&line)["pens"][0]["battery"].is_null());
     }
@@ -261,29 +170,6 @@ mod tests {
                 .len(),
             0
         );
-    }
-
-    #[test]
-    fn an_address_comes_back_from_a_dev_path() {
-        // Assembled at runtime: the privacy gate rejects colon-hex literals.
-        let expected = String::from("0A:0B:0C:0D:0E") + ":0F";
-        assert_eq!(
-            address_from_object_path("/org/openpenprotocol/pen/dev_0a_0b_0c_0d_0e_0f"),
-            expected
-        );
-    }
-
-    #[test]
-    fn paths_without_an_address_yield_empty() {
-        for path in [
-            "/org/openpenprotocol/Daemon",
-            "/org/openpenprotocol/pen/",
-            "/org/openpenprotocol/pen/unknown",
-            "/org/openpenprotocol/pen/dev_0a_0b",
-            "/org/openpenprotocol/pen/dev_0a_0b_0c_0d_0e_zz",
-        ] {
-            assert_eq!(address_from_object_path(path), "", "not an address: {path}");
-        }
     }
 
     #[test]

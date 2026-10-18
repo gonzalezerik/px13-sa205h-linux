@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 [workspace]
 resolver = "3"
-members = ["crates/opp-core", "crates/oppd", "crates/oppctl"]
+members = ["crates/opp-core", "crates/opp-client", "crates/oppd", "crates/oppctl"]
 
 [workspace.package]
 version = "0.0.1"

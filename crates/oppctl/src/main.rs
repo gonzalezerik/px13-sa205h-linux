@@ -37,7 +37,7 @@ fn main() -> ExitCode {
     let outcome = match command.as_str() {
         "status" | "watch" => match Options::parse(&args) {
             Err(message) => Err(message),
-            Ok(options) => zbus::block_on(async {
+            Ok(options) => opp_client::block_on(async {
                 if command == "status" {
                     client::status(options.all, options.system, options.json).await
                 } else {
