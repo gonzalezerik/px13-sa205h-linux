@@ -19,9 +19,11 @@
           version = (fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
           src = pkgs.lib.fileset.toSource {
             root = ./.;
-            fileset = pkgs.lib.fileset.unions [ ./Cargo.toml ./Cargo.lock ./crates ];
+            fileset = pkgs.lib.fileset.unions [ ./Cargo.toml ./Cargo.lock ./crates ./tools ];
           };
           cargoLock.lockFile = ./Cargo.lock;
+          nativeBuildInputs = [ pkgs.pkg-config ];
+          buildInputs = [ pkgs.gtk4 pkgs.libadwaita ];
           meta = {
             description = "Linux support for MPP 2.6 haptic pens";
             license = pkgs.lib.licenses.agpl3Plus;
@@ -44,6 +46,8 @@
             packages = with pkgs; [
               # Rust (both libcs are built by container/build.sh with podman)
               cargo rustc clippy rustfmt rust-analyzer cargo-deny pkg-config
+              # opp-settings builds against these
+              gtk4 libadwaita
               # reverse-engineering workbench (Ghidra runs headless only)
               nodejs_24 procps util-linux ghidra jdk21 rizin radare2 gdb ilspycmd
               innoextract msitools _7zz cabextract binwalk unblob upx

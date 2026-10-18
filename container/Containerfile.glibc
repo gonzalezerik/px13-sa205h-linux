@@ -8,8 +8,13 @@ ARG RUNTIME_IMAGE=docker.io/library/debian:trixie-slim
 
 FROM ${RUST_IMAGE} AS build
 WORKDIR /src
+# The settings window builds against the system GTK 4 / libadwaita.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends pkg-config libgtk-4-dev libadwaita-1-dev \
+ && rm -rf /var/lib/apt/lists/*
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY tools ./tools
 RUN cargo build --release --locked --workspace
 
 FROM build AS test

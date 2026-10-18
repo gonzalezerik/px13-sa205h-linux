@@ -31,7 +31,8 @@ A protocol is listed as supported only once it has been tested on real hardware.
 | **aarch64** | ✅ CI | ✅ CI |
 
 All four combinations are equal targets: CI builds, lints and tests each one natively.
-See [docs/decisions.md](docs/decisions.md).
+The one exception is `opp-settings` on musl, which needs a shared C library to link;
+its sources are still linted there (see [docs/decisions.md](docs/decisions.md)).
 
 ## Layout
 
@@ -40,11 +41,12 @@ See [docs/decisions.md](docs/decisions.md).
 | `crates/opp-core` | protocol types: digitizer reports, pairing, haptics |
 | `crates/oppd` | the daemon (hidraw + BlueZ, D-Bus API) |
 | `crates/oppctl` | command-line client |
+| `crates/opp-settings` | settings window (GTK 4 / libadwaita) |
 | `container/` | podman Containerfiles: `Containerfile.glibc` (Debian), `Containerfile.musl` (Alpine) |
 | `docs/` | protocol write-ups, parity matrix, decisions |
 | `findings/` | dated research notes |
 | `fixtures/` | recorded, scrubbed hardware data used by tests |
-| `tools/` | privacy gate, artifact fetcher |
+| `tools/` | privacy gate, accessibility check, artifact fetcher |
 
 ## Development
 
@@ -60,7 +62,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 
-nix build                 # release build (glibc) → ./result/bin/{oppd,oppctl}
+nix build                 # release build (glibc) → ./result/bin/{oppd,oppctl,opp-settings}
 nix flake check           # what CI's nix job runs
 ```
 
@@ -79,10 +81,11 @@ To work inside a toolchain container without installing Rust:
 ```sh
 # glibc
 podman run --rm -it -v "$PWD":/src:Z -w /src docker.io/library/rust:1.99.1-trixie \
-  cargo test --workspace
+  sh -c 'apt-get update && apt-get install -y --no-install-recommends \
+  pkg-config libgtk-4-dev libadwaita-1-dev && cargo test --workspace'
 # musl
 podman run --rm -it -v "$PWD":/src:Z -w /src docker.io/library/rust:1.99.1-alpine3.24 \
-  sh -c 'apk add --no-cache musl-dev && cargo test --workspace'
+  sh -c 'apk add --no-cache musl-dev pkgconf gtk4.0-dev libadwaita-dev && cargo test --workspace'
 ```
 
 Other architectures build under emulation once `qemu-user-static` binfmt handlers are
@@ -90,10 +93,12 @@ installed: `ARCH=arm64 container/build.sh`. CI builds them natively instead.
 
 ### With plain cargo
 
-Rust 1.89 or newer:
+Rust 1.89 or newer. `opp-settings` builds against the system GTK 4 and libadwaita
+(`libgtk-4-dev libadwaita-1-dev` on Debian/Ubuntu, `gtk4-devel libadwaita-devel` on
+Fedora, `gtk4-dev libadwaita-dev` on Alpine); the daemon and CLI need nothing else:
 
 ```sh
-cargo build --release --workspace     # → target/release/{oppd,oppctl}
+cargo build --release --workspace     # → target/release/{oppd,oppctl,opp-settings}
 ```
 
 Before every commit run the checks in [CONTRIBUTING.md](CONTRIBUTING.md) §3, and install
@@ -112,6 +117,7 @@ oppd watch-buttons --list # lists the pen's evdev nodes; without --list dumps it
 oppd haptic --list        # the pen's effect table (ordinals from its capability report)
 oppd haptic click --send  # one click buzz on the paired pen; without --send only the exact
                           # output-report bytes are printed
+opp-settings              # settings window (GTK 4; needs a running oppd)
 ```
 
 Once the daemon is functional it needs read/write access to the digitizer's

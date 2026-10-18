@@ -133,3 +133,14 @@ Open: whether `oppd` runs per user or system-wide. A per-user service can reach 
 send notifications and keep settings per user, with hidraw access from a udev `uaccess`
 rule. A system service only pays off if pairing or haptics must work before anyone
 logs in.
+
+## 2026-10-18: musl is the headless half
+
+The musl target links C libraries statically, and Alpine ships no static GTK
+stack — so `opp-settings` cannot link there, and static linking is exactly what
+the musl binaries are for. It is a desktop window, not one of the headless
+binaries the musl image distributes, so the Alpine stages build, lint and test
+everything except it; `cargo fmt` and `cargo clippy` (which never links) still
+cover its sources. The settings window ships through the Nix package and runs
+on any glibc desktop. Every other crate stays equal across all four
+combinations.

@@ -8,15 +8,21 @@ ARG RUNTIME_IMAGE=docker.io/library/alpine:3.24
 
 FROM ${RUST_IMAGE} AS build
 WORKDIR /src
+# Everything except the settings window builds here: a static musl link has no
+# GTK stack to link against (docs/decisions.md, "musl is the headless half").
+# The GTK dev packages stay because clippy still configures the sys crates;
+# fmt and clippy cover the settings sources without linking them.
+RUN apk add --no-cache musl-dev pkgconf gtk4.0-dev libadwaita-dev
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
-RUN apk add --no-cache musl-dev && cargo build --release --locked --workspace
+COPY tools ./tools
+RUN cargo build --release --locked --workspace --exclude opp-settings
 
 FROM build AS test
 RUN rustup component add clippy rustfmt \
  && cargo fmt --all --check \
  && cargo clippy --locked --workspace --all-targets -- -D warnings \
- && cargo test --locked --workspace
+ && cargo test --locked --workspace --exclude opp-settings
 
 FROM ${RUNTIME_IMAGE} AS runtime
 COPY --from=build /src/target/release/oppd /src/target/release/oppctl /usr/local/bin/
