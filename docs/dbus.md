@@ -56,15 +56,23 @@ removed when BlueZ forgets it — announcing a not-yet-paired pen does **not** c
 | Method | In | Out | Meaning |
 |---|---|---|---|
 | `ListPens()` | — | `ao` | object paths of the known pens |
-| `StartPairing()` | — | `b` | start the touch-to-pair listener; `b` is whether the state changed. Idempotent. |
+| `StartPairing()` | — | `b` | turn the touch-to-pair listener back on (it starts on its own) and retry every pen; `b` is whether the state changed. Idempotent. |
 | `StopPairing()` | — | `b` | stop it; `b` is whether the state changed. Idempotent. |
 
 Pairing is the flow of docs/protocol/seamless-pairing.md: the digitizer announces a pen
-whose tip just touched the screen, and `oppd` asks BlueZ to connect to the announced
-address (`AddressType=le`), pair (LE Just Works — the touch is the authentication) and
-trust it. Pairing touches the machine's Bluetooth state, so the listener stays **off**
-until something asks: the CLI (`oppd watch-pair`), the tray's "Pair a pen…", or a
-`StartPairing()` call.
+that came into range (hovering or touching), and `oppd` asks BlueZ to connect to the
+announced address (`AddressType=random`), pair (LE Just Works — bringing the pen to the
+screen is the authentication) and trust it. Where BlueZ does not export the experimental
+`ConnectDevice`, the pairing helper bonds through the kernel instead (docs/packaging.md).
+When a supported digitizer is present the listener runs from the moment `oppd` starts, so
+bringing a new pen near the screen is all it takes. `StopPairing()` turns it off;
+`StartPairing()` turns it back on and retries every pen at once.
+
+A pen that already holds a link is left alone. A pen that is paired but not connected gets a
+plain reconnect; only a stale key (the other OS of a dual boot re-paired the pen) leads to a
+fresh bond. A failed attempt is retried on a later announcement after a few seconds. Each new
+bond, and the first failure of a streak, raises a desktop notification
+(`org.freedesktop.Notifications`, session bus only); reconnects stay silent.
 
 ### Signals
 

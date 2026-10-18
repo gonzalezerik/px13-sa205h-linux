@@ -20,7 +20,7 @@ need to know which protocol the pen speaks.
 A protocol is listed as supported only once it has been tested on real hardware.
 
 > **Status: research.** The protocol work (`docs/protocol/`, `findings/`) comes first.
-> First function landed: `oppd watch-pair` bonds the pen the moment its tip touches the
+> First function landed: `oppd` bonds the pen the moment it comes near the
 > screen (`docs/protocol/seamless-pairing.md`). Haptics, battery and buttons are in progress.
 
 ## Platforms
@@ -113,6 +113,7 @@ oppd pairing-state        # reads the digitizer's seamless-pairing flag (read-on
 oppd watch-pair --dry-run # prints pairing notifications as a pen approaches, changes nothing
 oppd watch-pair           # bonds the announced pen: through BlueZ when the daemon exports
                           # ConnectDevice, otherwise via the polkit-gated kernel pairing helper
+oppctl watch              # follow the daemon live: pens, battery, pairing progress
 oppd watch-pen            # live battery + link changes of the paired pen (via BlueZ)
 oppd watch-buttons --list # lists the pen's evdev nodes; without --list dumps its raw events
 oppd haptic --list        # the pen's effect table (ordinals from its capability report)
@@ -123,8 +124,10 @@ opp-settings              # settings window (GTK 4; needs a running oppd)
 
 The daemon needs read/write access to the digitizer's `/dev/hidraw*` node and the system
 D-Bus (BlueZ). Installing the package — `make install`, the flake, or the NixOS module — is
-the whole setup: a generated uaccess rule hands the signed-in user the pen-related nodes, and
-D-Bus activation starts `oppd` and the pairing helper on demand, with nothing to enable.
+the whole setup: a generated uaccess rule hands the signed-in user the pen-related nodes,
+`oppd` starts with the graphical session (a systemd user preset the packaging applies), and
+the pairing helper is activated by the system bus on demand. A new pen pairs as soon as it
+comes near the screen, with a desktop notification.
 See [docs/packaging.md](docs/packaging.md). In a container:
 
 ```sh

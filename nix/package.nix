@@ -41,9 +41,9 @@ rustPlatform.buildRustPackage {
     install -Dm644 contrib/udev/70-open-pen-protocol.rules \
       $out/lib/udev/rules.d/70-open-pen-protocol.rules
 
-    install -Dm644 data/dbus/system-services/org.openpenprotocol.PairHelper1.conf \
-      $out/share/dbus-1/system-services/org.openpenprotocol.PairHelper1.conf
-    substituteInPlace $out/share/dbus-1/system-services/org.openpenprotocol.PairHelper1.conf \
+    install -Dm644 data/dbus/system-services/org.openpenprotocol.PairHelper1.service \
+      $out/share/dbus-1/system-services/org.openpenprotocol.PairHelper1.service
+    substituteInPlace $out/share/dbus-1/system-services/org.openpenprotocol.PairHelper1.service \
       --replace-fail "@PREFIX@" "$out"
 
     install -Dm644 data/dbus/system.d/org.openpenprotocol.PairHelper1.conf \
@@ -66,6 +66,8 @@ rustPlatform.buildRustPackage {
       $out/lib/systemd/user/oppd.service
     substituteInPlace $out/lib/systemd/user/oppd.service \
       --replace-fail "@PREFIX@" "$out"
+    install -Dm644 data/systemd/user-preset/80-open-pen-protocol.preset \
+      $out/lib/systemd/user-preset/80-open-pen-protocol.preset
 
     install -Dm644 crates/opp-settings/data/org.openpenprotocol.Settings.desktop \
       $out/share/applications/org.openpenprotocol.Settings.desktop

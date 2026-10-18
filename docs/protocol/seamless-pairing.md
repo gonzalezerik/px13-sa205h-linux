@@ -57,7 +57,10 @@ in MPP RF range of the pen), **PC host software** (unknown consumer; candidate: 
    + two state bits (usage 0x08 "address valid / pairing request?", usage 0x11 "pairing result /
    state?"). [HYPOTHESIS — bit meanings unconfirmed]
    **[VERIFIED-HW — session 08 run 2 + Linux capture]** the report fires spontaneously ~0.10–0.15 s
-   after the tip touches: 6-byte BD_ADDR **little-endian** + one flag byte. Flag is `0x03` while the
+   after the tip touches: 6-byte BD_ADDR **little-endian** + one flag byte. It does not need a
+   touch: in the Linux capture (no consumer running) it arrived 9 times, 7 of them while the pen
+   only hovered, before its first touch — once in range, an unconnected pen is announced again
+   every few seconds. Flag is `0x03` while the
    Windows consumer is active and `0x01` on bare Linux with no consumer — the second bit only
    appears with the Windows stack listening; its meaning stays HYPOTHESIS.
 4. The host consumer reads **feature 86** (6-byte buffer + 1 bit) — possibly the digitizer's own

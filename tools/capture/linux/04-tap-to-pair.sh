@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# One live tap-to-pair run with the daemon: `oppd watch-pair` bonds the pen
-# while btmon records the HCI side. Before and after, the script captures
-# the digitizer's seamless-pairing feature flag, and afterwards dumps
+# One live touch-to-pair run against the installed daemon: the session's
+# own `oppd` (started with the graphical session) bonds the pen while btmon
+# records the HCI side. Before and after, the script captures the
+# digitizer's seamless-pairing feature flag, and afterwards dumps
 # everything BlueZ learned about the pen: device info, GATT tree (includes
 # the battery service) and the input devices that appeared.
 #
@@ -12,13 +13,12 @@
 # LE Just Works and writes no vendor output reports, so if this bonds, the
 # digitizer key-relay output (0x6F) is optional.
 #
-# Usage (from the repo root, on the PX13, with the package installed — the
-# shipped uaccess rule grants the hidraw access, see docs/packaging.md):
-#   nix build .                     # or: cargo build --release -p oppd
+# Usage (from the repo root, with the package installed — on NixOS the
+# module, services.open-pen-protocol.enable — and logged in again since):
 #   tools/capture/linux/04-tap-to-pair.sh [outdir]
-# Set OPPD=/path/to/oppd to use a different daemon build.
-# Needs: read access to the digitizer hidraw node (the uaccess rule) and
-# the system D-Bus. sudo is only used for btmon.
+# Keep `oppctl watch` open in a second terminal to follow it live; a new
+# bond also raises a desktop notification. Needs: the installed package
+# (uaccess rule, user service, pairing helper) and sudo for btmon only.
 #
 # The dumps contain pairing material — treat the output folder like a
 # password; never commit it.
@@ -27,47 +27,57 @@ set -euo pipefail
 outdir="${1:-captures/linux}"
 dir="$outdir/tap-to-pair-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$dir"
-oppd="${OPPD:-result/bin/oppd}"
-if [ ! -x "$oppd" ]; then
-  echo "build the daemon first: nix build . (result/bin/oppd) or" >&2
-  echo "cargo build --release -p oppd — or point OPPD at a built binary" >&2
-  exit 1
+
+daemon() {
+  busctl --user call org.openpenprotocol.Daemon1 /org/openpenprotocol/Daemon \
+    org.openpenprotocol.Daemon1 "$@"
+}
+
+if ! systemctl --user is-active --quiet oppd.service; then
+  echo "oppd is not running — starting it (it normally starts with the session)"
+  systemctl --user start oppd.service
 fi
+systemctl --user status oppd.service --no-pager > "$dir/oppd-status.txt" 2>&1 || true
+journalctl --user -u oppd.service -f -o short-precise > "$dir/oppd.log" 2>&1 &
+journal_pid=$!
+oppctl watch --json > "$dir/watch.jsonl" 2>&1 &
+watch_pid=$!
+trap 'kill "$journal_pid" "$watch_pid" 2>/dev/null || true' EXIT
 
 cp /proc/bus/input/devices "$dir/input-devices-before.txt"
-"$oppd" pairing-state > "$dir/pairing-state-before.txt" 2>&1 || true
+oppd pairing-state > "$dir/pairing-state-before.txt" 2>&1 || true
 
 echo
-echo "Dry round first — nothing touches Bluetooth, this only checks that"
-echo "the digitizer announces the pen. One touch is enough."
-"$oppd" watch-pair --dry-run > "$dir/watch-pair-dry.log" 2>&1 &
+echo "Dry round first — the daemon's listener is paused and nothing touches"
+echo "Bluetooth; this only checks that the digitizer announces the pen."
+daemon StopPairing > /dev/null
+oppd watch-pair --dry-run > "$dir/watch-pair-dry.log" 2>&1 &
 dry_pid=$!
-echo "Touch the pen tip to the screen once, then press Enter."
+echo "Hover the pen over the screen (or touch it) once, then press Enter."
 read -r
 kill "$dry_pid" 2>/dev/null || true
 echo "--- dry round saw: ---"
 head -n 12 "$dir/watch-pair-dry.log" || true
 
-echo "btmon -> $dir/btmon.log"
-sudo btmon -w "$dir/btmon.log" &
-btmon_pid=$!
-trap 'sudo kill "$btmon_pid" 2>/dev/null || true' EXIT
-
-"$oppd" watch-pair > "$dir/watch-pair.log" 2>&1 &
-oppd_pid=$!
-
 echo
-echo "The listener is running (watch it with: tail -f $dir/watch-pair.log)."
-echo "Touch the pen tip to the screen and hold for a second. One bonding"
-echo "cycle is enough. Then come back here and press Enter to stop."
+echo "btmon -> $dir/btmon.log"
+sudo btmon -w "$dir/btmon.log" > /dev/null &
+btmon_pid=$!
+trap 'sudo kill "$btmon_pid" 2>/dev/null || true; kill "$journal_pid" "$watch_pid" 2>/dev/null || true' EXIT
+
+daemon StartPairing > /dev/null
+echo
+echo "The daemon is listening again. Bring the pen near the screen and keep it"
+echo "there a few seconds: oppctl watch shows it being found and paired, and a"
+echo "notification says the pen is paired. Then press Enter here to stop."
 read -r
 
-kill "$oppd_pid" 2>/dev/null || true
 sudo kill "$btmon_pid" 2>/dev/null || true
+kill "$journal_pid" "$watch_pid" 2>/dev/null || true
 trap - EXIT
 sleep 1
 
-"$oppd" pairing-state > "$dir/pairing-state-after.txt" 2>&1 || true
+oppd pairing-state > "$dir/pairing-state-after.txt" 2>&1 || true
 bluetoothctl show > "$dir/bluetoothctl-show.txt" 2>&1 || true
 bluetoothctl devices > "$dir/bluetoothctl-devices.txt" 2>&1 || true
 
@@ -85,5 +95,6 @@ diff -u "$dir/input-devices-before.txt" "$dir/input-devices-after.txt" \
   > "$dir/input-devices.diff" || true
 
 echo "Done. Dump in $dir — it is capture evidence, keep it private."
-echo "Success looks like: watch-pair.log shows 'paired and trusted',"
-echo "info-*.txt shows Paired: yes Trusted: yes, gatt-*.txt shows Battery1."
+echo "Success looks like: oppd.log shows 'paired and trusted', a 'paired'"
+echo "notification appeared, info-*.txt shows Paired: yes Trusted: yes, and"
+echo "gatt-*.txt shows Battery1."

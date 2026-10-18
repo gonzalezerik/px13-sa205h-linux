@@ -132,6 +132,10 @@ fn install() -> Result<(), String> {
         "SYSTEMD_USER_UNIT_DIR",
         &format!("{prefix}/lib/systemd/user"),
     );
+    let systemd_user_preset_dir = env_or(
+        "SYSTEMD_USER_PRESET_DIR",
+        &format!("{prefix}/lib/systemd/user-preset"),
+    );
 
     let root = repo_root();
     let data = root.join("data");
@@ -155,7 +159,7 @@ fn install() -> Result<(), String> {
         None,
     )?;
     install_file(
-        &data.join("dbus/system-services/org.openpenprotocol.PairHelper1.conf"),
+        &data.join("dbus/system-services/org.openpenprotocol.PairHelper1.service"),
         &staged(&destdir, &dbus_system_services_dir),
         0o644,
         Some(&prefix),
@@ -191,13 +195,10 @@ fn install() -> Result<(), String> {
         Some(&prefix),
     )?;
     install_file(
-        &data.join("systemd/user/oppd.service"),
-        &staged(
-            &destdir,
-            &format!("{prefix}/share/examples/open-pen-protocol"),
-        ),
+        &data.join("systemd/user-preset/80-open-pen-protocol.preset"),
+        &staged(&destdir, &systemd_user_preset_dir),
         0o644,
-        Some(&prefix),
+        None,
     )?;
 
     // Settings window entry and icon, next to where buildRustPackage
@@ -222,8 +223,10 @@ fn install() -> Result<(), String> {
     println!();
     println!("Installed under {destdir}{prefix}. If udev is running:");
     println!("  udevadm control --reload-rules && udevadm trigger");
-    println!("No systemd unit needs enabling: the pairing helper is D-Bus");
-    println!("activated, and oppd starts on the session bus on first use.");
+    println!("Then apply the user preset once, so oppd starts with every session:");
+    println!("  systemctl --global preset oppd.service");
+    println!("(distro packaging macros do this on install). The pairing helper");
+    println!("needs nothing: the system bus activates it when first called.");
     Ok(())
 }
 
@@ -304,5 +307,31 @@ mod tests {
     #[test]
     fn rules_are_stable_across_runs() {
         assert_eq!(rules_text(), rules_text());
+    }
+
+    /// The bus only reads activation files named after the bus name they
+    /// declare plus `.service` (dbus-daemon(1), `<servicedir>`); any other
+    /// name is silently skipped and the service never starts.
+    #[test]
+    fn dbus_activation_files_are_named_after_their_bus_name() {
+        let data = repo_root().join("data/dbus");
+        let mut checked = 0;
+        for dir in ["system-services", "session-services"] {
+            for entry in fs::read_dir(data.join(dir)).expect("activation dir") {
+                let path = entry.expect("dir entry").path();
+                let body = fs::read_to_string(&path).expect("activation file");
+                let name = body
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Name="))
+                    .expect("a Name= line");
+                let file = path
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .expect("utf-8 name");
+                assert_eq!(file, format!("{name}.service"), "{}", path.display());
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 2, "one system and one session activation file");
     }
 }

@@ -214,7 +214,7 @@ async fn watch_pair_async(dry_run: bool, adapter: String) -> Result<(), String> 
             format!("cannot reach the system bus (is bluetoothd running?): {error}")
         })?)
     };
-    println!("watching for pairing notifications — tap the pen tip to the screen (Ctrl-C to stop)");
+    println!("watching for pairing notifications — bring the pen near the screen (Ctrl-C to stop)");
     let start = Instant::now();
     let mut frame = vec![0u8; READ_BUF_BYTES];
     let mut last_attempt = HashMap::<String, Instant>::new();
@@ -245,8 +245,36 @@ async fn watch_pair_async(dry_run: bool, adapter: String) -> Result<(), String> 
             }
             last_attempt.insert(address.clone(), Instant::now());
             match bond(connection, &adapter, &address).await {
-                Ok(summary) => println!("  {summary}"),
+                Ok(bonded) => println!("  {}", bonded.describe(&address)),
                 Err(message) => eprintln!("  pairing failed: {message}"),
+            }
+        }
+    }
+}
+
+/// How one announcement ended, for logs and for deciding what to tell the
+/// user: only a new bond is news, reconnects stay quiet.
+pub(crate) enum Bonded {
+    /// BlueZ already had the pen on a live link.
+    AlreadyConnected,
+    /// A known pen whose stored key still worked.
+    Reconnected,
+    /// A new bond: first contact, or a stale one replaced.
+    Paired { via_helper: bool },
+}
+
+impl Bonded {
+    pub(crate) fn is_new_bond(&self) -> bool {
+        matches!(self, Bonded::Paired { .. })
+    }
+
+    pub(crate) fn describe(&self, address: &str) -> String {
+        match self {
+            Bonded::AlreadyConnected => format!("already paired and connected: {address}"),
+            Bonded::Reconnected => format!("reconnected to paired pen {address}"),
+            Bonded::Paired { via_helper: false } => format!("paired and trusted {address}"),
+            Bonded::Paired { via_helper: true } => {
+                format!("paired and trusted {address} (kernel-initiated)")
             }
         }
     }
@@ -263,7 +291,7 @@ async fn watch_pair_async(dry_run: bool, adapter: String) -> Result<(), String> 
 /// pen on every tap, so after a boot there BlueZ's key is stale by design.
 /// Try plain `Connect` first; if the key is rejected or the connect hangs,
 /// drop BlueZ's record and bond fresh — the same model Windows uses.
-async fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<String, String> {
+async fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<Bonded, String> {
     let adapter_path = format!("/org/bluez/{adapter}");
     let pen_path = format!("{adapter_path}/dev_{}", address.replace(':', "_"));
     let adapter_proxy = Proxy::new(
@@ -292,7 +320,7 @@ async fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<S
             .await
             .unwrap_or(false)
         {
-            return Ok(format!("already paired and connected: {address}"));
+            return Ok(Bonded::AlreadyConnected);
         }
         // The announcement proves the pen is in range; if BlueZ's key is
         // still current a plain Connect finishes in well under a second.
@@ -301,7 +329,7 @@ async fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<S
             .await
         {
             Either::Left((Ok(()), _)) => {
-                return Ok(format!("reconnected to paired pen {address}"));
+                return Ok(Bonded::Reconnected);
             }
             Either::Left((Err(error), _)) if is_stale_bond_error(&error) => {
                 println!("  {address}: stored bond is stale ({error}) — re-pairing");
@@ -329,7 +357,7 @@ async fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<S
                 .set_property("Trusted", true)
                 .await
                 .map_err(|error| format!("Trusted: {error}"))?;
-            return Ok(format!("paired and trusted {address} (kernel-initiated)"));
+            return Ok(Bonded::Paired { via_helper: true });
         }
         if !is_bluez_error(
             &error,
@@ -351,7 +379,7 @@ async fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<S
         .set_property("Trusted", true)
         .await
         .map_err(|error| format!("Trusted: {error}"))?;
-    Ok(format!("paired and trusted {address}"))
+    Ok(Bonded::Paired { via_helper: false })
 }
 
 /// The no-configuration path. Stock bluetoothd exports no way to bond a

@@ -48,9 +48,11 @@
           # oppd on each session bus. Both start on demand.
           services.dbus.packages = [ pkgs.open-pen-protocol ];
 
-          # opp-pair-helper.service (D-Bus activated) and the optional
-          # systemctl --user view of oppd. Neither has [Install].
+          # opp-pair-helper.service (D-Bus activated, no [Install]) and
+          # oppd.service, which starts with every graphical session so the
+          # touch-to-pair listener is up before the pen comes near.
           systemd.packages = [ pkgs.open-pen-protocol ];
+          systemd.user.services.oppd.wantedBy = [ "graphical-session.target" ];
         };
       };
 

@@ -20,9 +20,11 @@ switch that would do nothing. The haptics rows are the switch
 (`Haptics1.Enabled`) and an intensity slider (`Haptics1.Intensity`,
 0–100 %).
 
-`Search for pens` runs `StartPairing()`; pairing progress arrives as
-`PairingEvent` toasts (announced → bonded, or failed with the daemon's
-reason). Pressing it again runs `StopPairing()`.
+Pairing needs no button: `oppd` listens from the start and pairs a new
+pen as soon as it comes near the screen. `Search for pens` runs
+`StartPairing()`, which also retries pens whose pairing failed; pairing
+progress arrives as `PairingEvent` toasts (announced → bonded, or failed
+with the daemon's reason). Pressing it again runs `StopPairing()`.
 
 When `oppd` goes away the window stays open and says so: it is easier
 to restart a daemon than to recover a dead settings window.

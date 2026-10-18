@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# The optional systemd --user view of the daemon. Session-bus
-# activation (share/dbus-1/services) starts oppd on the first D-Bus
-# call already; this unit is the same service for people who prefer to
-# manage it with systemctl --user. @PREFIX@ is substituted at install
-# time.
+# The per-user daemon. It starts with the graphical session so the
+# touch-to-pair listener is up before the pen first comes near the
+# screen; the preset in lib/systemd/user-preset enables it on install
+# (systemctl --global, run by the distro's packaging macros). Session-bus
+# activation (share/dbus-1/services) still starts it on the first D-Bus
+# call wherever the preset was not applied. @PREFIX@ is substituted at
+# install time.
 
 [Unit]
 Description=Open Pen Protocol daemon
 Documentation=https://github.com/gonzalezerik/open-pen-protocol
+PartOf=graphical-session.target
+After=graphical-session.target
 
 [Service]
 Type=dbus
@@ -15,3 +19,6 @@ BusName=org.openpenprotocol.Daemon1
 ExecStart=@PREFIX@/bin/oppd serve
 Restart=on-failure
 RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

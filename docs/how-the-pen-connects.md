@@ -72,11 +72,15 @@ advertising reports from various devices — none from the pen, touching or hove
 An ordinary `bluetoothctl scan` can therefore never find this pen **[ours:
 findings/006 §7.5]**.
 
-## Tap-to-pair, as measured
+## Touch-to-pair, as measured
 
 The trick is that the *digitizer* delivers the Bluetooth address to the host, so the
-host can connect directly. The full clock chain from one instrumented Windows session
-(all timestamps from a single local clock, findings/006 §2):
+host can connect directly. The pen does not even have to touch: the digitizer announces
+it as soon as it is in range, hovering included, and repeats the announcement every few
+seconds while the pen has no Bluetooth link. In a Linux recording with no pairing software
+running, 7 of 9 announcements came while the pen only hovered, before it first touched the
+screen **[ours]**. The full clock chain from one instrumented Windows session, measured from
+a touch (all timestamps from a single local clock, findings/006 §2):
 
 | t (s) | what happens |
 |---|---|
