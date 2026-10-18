@@ -67,6 +67,17 @@ action** (pen touch, button press, slider move) so the traces can be lined up
 with what you did. Each session writes into its own folder
 `C:\mpp-captures\<NN-name>\`.
 
+## Run order
+
+**Run session 00 first, then session 03 immediately, then everything else.**
+Seamless pairing happens the first time an unpaired pen tip touches this
+install's screen — that one-time event is exactly what session 03 arms its
+traces to catch. Sessions 01, 02, 04 and 05 all bring the pen to the screen,
+so if one of them runs first it consumes the first pairing while the wrong
+traces are armed. After session 03, the remaining sessions can run in any
+order — and so may any host: the Linux pairing script must wait for session
+03 too.
+
 ## Session 00 — inventory
 
 Answers: which drivers own the pen/digitizer, and where their settings are.
@@ -98,6 +109,10 @@ Then screenshots (Win+Shift+S, save into the session folder) of:
   path” for each.
 
 ## Session 01 — boot trace: what Windows sends to the digitizer
+
+**Run only after 03.** The hover + line at the end of this session is
+pen-to-screen contact; on an unpaired pen that contact may be its pairing
+moment, which belongs to session 03.
 
 Answers the “digitizer configuration” parity item: every feature report / bus
 transfer Windows performs at startup, to compare with what `hid-multitouch`
@@ -137,6 +152,9 @@ built-in boot-trace mode) and note it in the session log.
 
 ## Session 02 — inking quality
 
+**Run only after 03.** Inking is pen-to-screen contact; on an unpaired pen
+the first touch pairs it, and that exchange is session 03's evidence.
+
 Answers: report rate, jitter, pressure range, tilt/azimuth, eraser — measured
 end-to-end through the same page we will run on Linux.
 
@@ -171,7 +189,7 @@ Also open Settings → Bluetooth & devices → Pen & Windows Ink and run any
 built-in pen test/preview it offers while the trace is still running, if the
 page was not already open.
 
-## Session 03 — first tap-to-pair (the priority)
+## Session 03 — first tap-to-pair (the priority — right after 00)
 
 Answers: the seamless-pairing flow end to end (which side initiates, what the
 digitizer and the pen exchange over Bluetooth, what Windows does with it).
