@@ -9,11 +9,12 @@
 # Prerequisite: the pen is already paired (see 04-tap-to-pair.sh) and
 # awake — touch the tip to the screen right before each send, the BLE
 # link drops while idle. Needs write access to the pen hidraw node
-# (input group membership).
+# (the shipped uaccess rule, docs/packaging.md).
 #
 # Usage (from the repo root, on the PX13):
-#   cargo build -p oppd
+#   nix build .                     # or: cargo build --release -p oppd
 #   tools/capture/linux/05-first-haptics.sh [outdir]
+# Set OPPD=/path/to/oppd to use a different daemon build.
 #
 # What each step should feel like, from the Windows-side wire session
 # (findings/006 §4): one crisp click in the air; the success chirp
@@ -27,12 +28,21 @@ set -euo pipefail
 outdir="${1:-captures/linux}"
 dir="$outdir/first-haptics-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$dir"
-oppd="target/debug/oppd"
+oppd="${OPPD:-result/bin/oppd}"
 if [ ! -x "$oppd" ]; then
-  echo "build the daemon first: cargo build -p oppd" >&2
+  echo "build the daemon first: nix build . (result/bin/oppd) or" >&2
+  echo "cargo build --release -p oppd — or point OPPD at a built binary" >&2
   exit 1
 fi
 log="$dir/run.log"
+
+echo | tee -a "$log"
+echo "== pre-flight: barrel button, observation only (nothing is sent) ==" | tee -a "$log"
+echo "Draw a few strokes pressing the barrel button once or twice mid-draw."
+echo "Does every press get its own click buzz from the pen itself?"
+printf 'one line: '
+read -r felt
+echo "barrel: $felt" | tee -a "$log"
 
 step() {
   local label="$1"; shift

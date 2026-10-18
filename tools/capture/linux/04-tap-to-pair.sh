@@ -12,11 +12,13 @@
 # LE Just Works and writes no vendor output reports, so if this bonds, the
 # digitizer key-relay output (0x6F) is optional.
 #
-# Usage (from the repo root, on the PX13):
-#   cargo build -p oppd
+# Usage (from the repo root, on the PX13, with the package installed — the
+# shipped uaccess rule grants the hidraw access, see docs/packaging.md):
+#   nix build .                     # or: cargo build --release -p oppd
 #   tools/capture/linux/04-tap-to-pair.sh [outdir]
-# Needs: read access to the digitizer hidraw node (input group membership)
-# and the system D-Bus. sudo is only used for btmon.
+# Set OPPD=/path/to/oppd to use a different daemon build.
+# Needs: read access to the digitizer hidraw node (the uaccess rule) and
+# the system D-Bus. sudo is only used for btmon.
 #
 # The dumps contain pairing material — treat the output folder like a
 # password; never commit it.
@@ -25,14 +27,26 @@ set -euo pipefail
 outdir="${1:-captures/linux}"
 dir="$outdir/tap-to-pair-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$dir"
-oppd="target/debug/oppd"
+oppd="${OPPD:-result/bin/oppd}"
 if [ ! -x "$oppd" ]; then
-  echo "build the daemon first: cargo build -p oppd" >&2
+  echo "build the daemon first: nix build . (result/bin/oppd) or" >&2
+  echo "cargo build --release -p oppd — or point OPPD at a built binary" >&2
   exit 1
 fi
 
 cp /proc/bus/input/devices "$dir/input-devices-before.txt"
 "$oppd" pairing-state > "$dir/pairing-state-before.txt" 2>&1 || true
+
+echo
+echo "Dry round first — nothing touches Bluetooth, this only checks that"
+echo "the digitizer announces the pen. One touch is enough."
+"$oppd" watch-pair --dry-run > "$dir/watch-pair-dry.log" 2>&1 &
+dry_pid=$!
+echo "Touch the pen tip to the screen once, then press Enter."
+read -r
+kill "$dry_pid" 2>/dev/null || true
+echo "--- dry round saw: ---"
+head -n 12 "$dir/watch-pair-dry.log" || true
 
 echo "btmon -> $dir/btmon.log"
 sudo btmon -w "$dir/btmon.log" &

@@ -111,7 +111,8 @@ oppctl --version
 oppd                      # prints the supported digitizers
 oppd pairing-state        # reads the digitizer's seamless-pairing flag (read-only)
 oppd watch-pair --dry-run # prints pairing notifications as a pen approaches, changes nothing
-oppd watch-pair           # bonds the announced pen through BlueZ (needs the system bus)
+oppd watch-pair           # bonds the announced pen: through BlueZ when the daemon exports
+                          # ConnectDevice, otherwise via the polkit-gated kernel pairing helper
 oppd watch-pen            # live battery + link changes of the paired pen (via BlueZ)
 oppd watch-buttons --list # lists the pen's evdev nodes; without --list dumps its raw events
 oppd haptic --list        # the pen's effect table (ordinals from its capability report)
@@ -120,9 +121,11 @@ oppd haptic click --send  # one click buzz on the paired pen; without --send onl
 opp-settings              # settings window (GTK 4; needs a running oppd)
 ```
 
-Once the daemon is functional it needs read/write access to the digitizer's
-`/dev/hidraw*` node (a udev rule, shipped with the package) and the system D-Bus
-(BlueZ). In a container:
+The daemon needs read/write access to the digitizer's `/dev/hidraw*` node and the system
+D-Bus (BlueZ). Installing the package — `make install`, the flake, or the NixOS module — is
+the whole setup: a generated uaccess rule hands the signed-in user the pen-related nodes, and
+D-Bus activation starts `oppd` and the pairing helper on demand, with nothing to enable.
+See [docs/packaging.md](docs/packaging.md). In a container:
 
 ```sh
 podman run --rm \
@@ -131,7 +134,17 @@ podman run --rm \
   open-pen-protocol:glibc
 ```
 
-A NixOS module and distribution packages come later.
+On NixOS, importing the flake's module is the entire system setup:
+
+```nix
+{
+  imports = [ inputs.open-pen-protocol.nixosModules.default ];
+  services.open-pen-protocol.enable = true;
+}
+```
+
+That wires the udev rules, the D-Bus activation and policy files, the polkit action and the
+units from the package into the system; see [docs/packaging.md](docs/packaging.md).
 
 ## Reverse-engineering workbench
 
