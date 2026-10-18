@@ -14,30 +14,45 @@
       # nixpkgs' binary cache has no musl Rust toolchain, so a Nix musl build would
       # compile rustc first. CI treats both the same (see docs/decisions.md).
       packages = forAll (pkgs: {
-        default = pkgs.rustPlatform.buildRustPackage {
-          pname = "open-pen-protocol";
-          version = (fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
-          src = pkgs.lib.fileset.toSource {
-            root = ./.;
-            fileset = pkgs.lib.fileset.unions [ ./Cargo.toml ./Cargo.lock ./crates ./tools ];
-          };
-          cargoLock.lockFile = ./Cargo.lock;
-          nativeBuildInputs = [ pkgs.pkg-config ];
-          buildInputs = [ pkgs.gtk4 pkgs.libadwaita ];
-          postInstall = ''
-            install -Dm644 crates/opp-settings/data/org.openpenprotocol.Settings.desktop \
-              $out/share/applications/org.openpenprotocol.Settings.desktop
-            install -Dm644 crates/opp-settings/data/icons/hicolor/scalable/apps/org.openpenprotocol.Settings.svg \
-              $out/share/icons/hicolor/scalable/apps/org.openpenprotocol.Settings.svg
-          '';
-          meta = {
-            description = "Linux support for MPP 2.6 haptic pens";
-            license = pkgs.lib.licenses.agpl3Plus;
-            mainProgram = "oppd";
-            platforms = systems;
-          };
-        };
+        default = pkgs.callPackage ./nix/package.nix { };
       });
+
+      # For NixOS and any other nixpkgs consumer that prefers the package
+      # in the package set.
+      overlays.default = final: prev: {
+        open-pen-protocol = final.callPackage ./nix/package.nix { };
+      };
+
+      # Importing this module (plus the overlay, included here) is the
+      # whole system setup: rules, activation files, polkit action and
+      # units all ship in the package, and nothing needs enabling.
+      nixosModules.default = { ... }: {
+        imports = [ self.nixosModules.open-pen-protocol ];
+        nixpkgs.overlays = [ self.overlays.default ];
+      };
+
+      # The same thing without the overlay, for systems that already
+      # carry open-pen-protocol in their package set.
+      nixosModules.open-pen-protocol = { config, lib, pkgs, ... }: {
+        options.services.open-pen-protocol.enable =
+          lib.mkEnableOption "Open Pen Protocol, MPP 2.6 haptic pen support";
+
+        config = lib.mkIf config.services.open-pen-protocol.enable {
+          environment.systemPackages = [ pkgs.open-pen-protocol ];
+
+          # uaccess rules for the digitizer and the pen, from the
+          # generated rule in lib/udev/rules.d.
+          services.udev.packages = [ pkgs.open-pen-protocol ];
+
+          # D-Bus activation: the pairing helper on the system bus and
+          # oppd on each session bus. Both start on demand.
+          services.dbus.packages = [ pkgs.open-pen-protocol ];
+
+          # opp-pair-helper.service (D-Bus activated) and the optional
+          # systemctl --user view of oppd. Neither has [Install].
+          systemd.packages = [ pkgs.open-pen-protocol ];
+        };
+      };
 
       checks = forAll (pkgs: { build = self.packages.${pkgs.stdenv.hostPlatform.system}.default; });
 

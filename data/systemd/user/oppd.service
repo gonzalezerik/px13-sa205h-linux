@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# The optional systemd --user view of the daemon. Session-bus
+# activation (share/dbus-1/services) starts oppd on the first D-Bus
+# call already; this unit is the same service for people who prefer to
+# manage it with systemctl --user. @PREFIX@ is substituted at install
+# time.
+
+[Unit]
+Description=Open Pen Protocol daemon
+Documentation=https://github.com/gonzalezerik/open-pen-protocol
+
+[Service]
+Type=dbus
+BusName=org.openpenprotocol.Daemon1
+ExecStart=@PREFIX@/bin/oppd serve
+Restart=on-failure
+RestartSec=2

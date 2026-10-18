@@ -1270,6 +1270,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "xtask"
+version = "0.0.0"
+dependencies = [
+ "opp-core",
+]
+
+[[package]]
 name = "zbus"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

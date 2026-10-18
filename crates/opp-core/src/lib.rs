@@ -23,6 +23,17 @@ pub const SUPPORTED_DIGITIZERS: &[(HidId, &str)] = &[(
     "ELAN9008 (ASUS ProArt PX13 HN7306)",
 )];
 
+/// Pens this project has been verified against, as they appear on the
+/// pen's own HID node (bus id 0005, Bluetooth). The udev rule is
+/// generated from these tables, never written by hand.
+pub const SUPPORTED_PENS: &[(HidId, &str)] = &[(
+    HidId {
+        vendor: 0x330a,
+        product: 0x0001,
+    },
+    "MPP 2.6 haptic pen (ASUS SA205H class)",
+)];
+
 /// Looks up a digitizer by its HID id.
 pub fn supported_digitizer(id: HidId) -> Option<&'static str> {
     SUPPORTED_DIGITIZERS
@@ -34,6 +45,15 @@ pub fn supported_digitizer(id: HidId) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_supported_pen_is_known() {
+        let id = HidId {
+            vendor: 0x330a,
+            product: 0x0001,
+        };
+        assert!(SUPPORTED_PENS.iter().any(|(known, _)| *known == id));
+    }
 
     #[test]
     fn px13_digitizer_is_known() {

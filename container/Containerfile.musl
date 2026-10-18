@@ -16,11 +16,13 @@ RUN apk add --no-cache musl-dev pkgconf gtk4.0-dev libadwaita-dev
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY tools ./tools
+COPY contrib ./contrib
 RUN cargo build --release --locked --workspace --exclude opp-settings
 
 FROM build AS test
 RUN rustup component add clippy rustfmt \
  && cargo fmt --all --check \
+ && cargo run --locked -p xtask -- generate-udev-rules --check \
  && cargo clippy --locked --workspace --all-targets -- -D warnings \
  && cargo test --locked --workspace --exclude opp-settings
 

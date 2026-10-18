@@ -15,11 +15,13 @@ RUN apt-get update \
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY tools ./tools
+COPY contrib ./contrib
 RUN cargo build --release --locked --workspace
 
 FROM build AS test
 RUN rustup component add clippy rustfmt \
  && cargo fmt --all --check \
+ && cargo run --locked -p xtask -- generate-udev-rules --check \
  && cargo clippy --locked --workspace --all-targets -- -D warnings \
  && cargo test --locked --workspace
 

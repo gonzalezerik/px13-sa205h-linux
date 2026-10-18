@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0"
+ "https://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+<policyconfig>
+  <vendor>Open Pen Protocol</vendor>
+  <vendor_url>https://github.com/gonzalezerik/open-pen-protocol</vendor_url>
+
+  <!-- Pairing a pen the touch screen just announced. Active local
+       sessions need no password, exactly as BlueZ's own pairing is
+       reachable; remote or inactive callers are refused. -->
+  <action id="org.openpenprotocol.pair-pen">
+    <description>Pair the haptic pen announced by the touch screen</description>
+    <message>Pair the pen this machine's touch screen just announced?</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

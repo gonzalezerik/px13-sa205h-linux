@@ -8,6 +8,7 @@ members = [
     "crates/oppctl",
     "crates/opp-settings",
     "crates/opp-pair-helper",
+    "crates/xtask",
 ]
 
 [workspace.package]
