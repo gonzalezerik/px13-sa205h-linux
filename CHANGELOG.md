@@ -6,7 +6,9 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
-- Project scaffold: Rust workspace (`mpp-core`, `mppd`, `mppctl`), Nix flake,
+- Renamed the project to Open Pen Protocol (OPP): crates `opp-core`, `oppd`, `oppctl`.
+
+- Project scaffold: Rust workspace (`opp-core`, `oppd`, `oppctl`), Nix flake,
   podman Containerfiles for glibc (Debian) and musl (Alpine), CI on x86_64 and
   aarch64, privacy and accessibility gates.
 - PX13 digitizer fixtures and identification findings.

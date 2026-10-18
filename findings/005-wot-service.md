@@ -87,7 +87,7 @@ toggle IC sleep/wake around system power events (cmds 1/2), and answer FW-versio
   the pen collection handle is never opened. (Caveat: vtable-indirect dispatch is not fully
   resolved by Ghidra; nothing in the service's own code paths references those slots.)
 
-## What this means for mpp-linux
+## What this means for Open Pen Protocol
 
 - Wake-on-Touch on this hardware is one 4-byte R3 command (`F0 2F 00 01/00`) — but R3 stays in the
   **dangerous** bucket (CONTRIBUTING.md §6): writing `F0 2F 00 00` would disable wake-on-touch, and

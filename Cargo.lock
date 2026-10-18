@@ -3,19 +3,19 @@
 version = 4
 
 [[package]]
-name = "mpp-core"
+name = "opp-core"
 version = "0.0.1"
 
 [[package]]
-name = "mppctl"
+name = "oppctl"
 version = "0.0.1"
 dependencies = [
- "mpp-core",
+ "opp-core",
 ]
 
 [[package]]
-name = "mppd"
+name = "oppd"
 version = "0.0.1"
 dependencies = [
- "mpp-core",
+ "opp-core",
 ]

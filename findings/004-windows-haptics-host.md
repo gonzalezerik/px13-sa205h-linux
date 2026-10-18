@@ -82,7 +82,7 @@ Solved (all STATIC; addresses = Ghidra entry points in the image above):
 
 ## Consequences for the project
 
-- `docs/protocol/haptics.md` now carries the full normative model for mppd's haptics module
+- `docs/protocol/haptics.md` now carries the full normative model for oppd's haptics module
   (output-report-only playback, fallback rules, timing semantics, system-originated map).
 - The oppd haptics output can be specified byte-for-byte from the captured SA205H descriptor +
   this model; still gated on byte-level approval before any output report is sent.

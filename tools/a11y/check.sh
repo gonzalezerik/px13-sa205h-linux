@@ -25,7 +25,7 @@ grep -q "WCAG 2.2" "$root/CONTRIBUTING.md" 2>/dev/null \
   || err "CONTRIBUTING.md lost its Accessibility section"
 
 # 2. UI code must not outrun its a11y checks. The settings app (GTK4 +
-#    libadwaita, crates/mpp-settings) must ship an automated AT-SPI2 check
+#    libadwaita, crates/opp-settings) must ship an automated AT-SPI2 check
 #    (any file or dir named *a11y*) before it lands.
 for dir in "$root"/crates/*settings* "$root"/apps/*; do
   [ -d "$dir" ] || continue

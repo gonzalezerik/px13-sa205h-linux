@@ -1,4 +1,4 @@
-# Contributing to mpp-linux
+# Contributing to Open Pen Protocol
 
 Thanks for helping. These rules keep the history clean and the project safe for
 people's pens, digitizers and private data.
@@ -98,7 +98,7 @@ per line). That file is git-ignored, so the terms it protects are never publishe
 
 ## 5. License and evidence
 
-mpp-linux is licensed under the **GNU AGPL-3.0-or-later** (see `LICENSE`). By
+Open Pen Protocol is licensed under the **GNU AGPL-3.0-or-later** (see `LICENSE`). By
 contributing you agree your contribution is released under that license. Code
 reused from other projects keeps its header, is named in the commit body and is
 allowed only from AGPL/GPL-3.0(+), MIT, BSD, Apache-2.0, MPL-2.0 or LGPL-3.0
@@ -146,7 +146,7 @@ specific architecture's layout; read device data with explicit endianness.
 
 ## 9. Accessibility
 
-**mpp-linux targets WCAG 2.2 Level AA for every user-facing surface, enforced in
+**Open Pen Protocol targets WCAG 2.2 Level AA for every user-facing surface, enforced in
 CI.** The standard and checklist are in [docs/a11y.md](docs/a11y.md).
 Non-negotiables: no information by colour alone; full keyboard operation with
 visible focus; accessible names on every control; 4.5:1 contrast in both themes;

@@ -3,11 +3,11 @@
 
 fn main() {
     match std::env::args().nth(1).as_deref() {
-        Some("--version") | Some("-V") => println!("mppd {}", env!("CARGO_PKG_VERSION")),
+        Some("--version") | Some("-V") => println!("oppd {}", env!("CARGO_PKG_VERSION")),
         _ => {
-            println!("mppd {}: not implemented yet.", env!("CARGO_PKG_VERSION"));
+            println!("oppd {}: not implemented yet.", env!("CARGO_PKG_VERSION"));
             println!("Supported digitizers:");
-            for (id, name) in mpp_core::SUPPORTED_DIGITIZERS {
+            for (id, name) in opp_core::SUPPORTED_DIGITIZERS {
                 println!("  {:04x}:{:04x}  {name}", id.vendor, id.product);
             }
         }

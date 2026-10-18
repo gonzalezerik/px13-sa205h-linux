@@ -146,7 +146,7 @@ handwriting-panel flag. So the persisted value is read by the
 the per-user settings store (registry or CDP), read by the shell/input producer. Decisive test:
 Windows capture session 4 (registry + settings-store diff around a haptics toggle).
 
-## 3. What mppd must reproduce (normative checklist)
+## 3. What oppd must reproduce (normative checklist)
 
 1. Read Waveform List + Duration List once per pen connection via **GET_FEATURE** (allowed:
    reads are non-destructive); build the ordinal↔waveform table. [DOC §1, STATIC §2.1]

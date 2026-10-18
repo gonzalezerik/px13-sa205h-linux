@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 [workspace]
 resolver = "3"
-members = ["crates/mpp-core", "crates/mppd", "crates/mppctl"]
+members = ["crates/opp-core", "crates/oppd", "crates/oppctl"]
 
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
 rust-version = "1.85"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/gonzalezerik/mpp-linux"
+repository = "https://github.com/gonzalezerik/open-pen-protocol"
 description = "Linux support for MPP 2.6 haptic pens"
 
 [workspace.lints.rust]

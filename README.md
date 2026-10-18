@@ -1,19 +1,19 @@
-# mpp-linux
+# Open Pen Protocol (OPP)
 
-Linux support for **MPP 2.6 haptic pens** (Microsoft Pen Protocol), aiming at parity with
-what Windows does for them: tap-to-pair over Bluetooth, haptic feedback, pen battery,
-Bluetooth buttons and pen settings.
+Open Pen Protocol is Linux support for **MPP 2.6 haptic pens** (Microsoft Pen Protocol),
+aiming at parity with what Windows does for them: tap-to-pair over Bluetooth, haptic
+feedback, pen battery, Bluetooth buttons and pen settings.
 
 First target: the **ASUS Pen 3.0 (SA205H)** on the **ASUS ProArt PX13 (HN7306)** with the
 ELAN `04F3:4631` digitizer. Inking (position, pressure, tilt, eraser, barrel button)
 already works on Linux through `hid-multitouch`. This project adds everything else.
 
 > **Status: research.** The protocol work (`docs/protocol/`, `findings/`) comes first.
-> `mppd` and `mppctl` build and run but don't do anything useful yet.
+> `oppd` and `oppctl` build and run but don't do anything useful yet.
 
 ## Accessibility
 
-mpp-linux targets **WCAG 2.2 Level AA** for every user-facing surface (settings app,
+Open Pen Protocol targets **WCAG 2.2 Level AA** for every user-facing surface (settings app,
 CLI output, notifications), and every haptic cue has a visual or audible equivalent.
 See [docs/a11y.md](docs/a11y.md).
 
@@ -31,9 +31,9 @@ See [docs/decisions.md](docs/decisions.md).
 
 | Path | What |
 |---|---|
-| `crates/mpp-core` | protocol types: digitizer reports, pairing, haptics |
-| `crates/mppd` | the daemon (hidraw + BlueZ, D-Bus API) |
-| `crates/mppctl` | command-line client |
+| `crates/opp-core` | protocol types: digitizer reports, pairing, haptics |
+| `crates/oppd` | the daemon (hidraw + BlueZ, D-Bus API) |
+| `crates/oppctl` | command-line client |
 | `container/` | podman Containerfiles: `Containerfile.glibc` (Debian), `Containerfile.musl` (Alpine) |
 | `docs/` | protocol write-ups, parity matrix, decisions, accessibility standard |
 | `findings/` | dated research notes |
@@ -54,7 +54,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 
-nix build                 # release build (glibc) → ./result/bin/{mppd,mppctl}
+nix build                 # release build (glibc) → ./result/bin/{oppd,oppctl}
 nix flake check           # what CI's nix job runs
 ```
 
@@ -65,7 +65,7 @@ The flake supports `x86_64-linux` and `aarch64-linux`.
 ```sh
 container/build.sh              # glibc and musl: fmt, clippy, tests, then the runtime images
 container/build.sh musl         # just one
-podman run --rm mpp-linux:musl --version
+podman run --rm open-pen-protocol:musl --version
 ```
 
 To work inside a toolchain container without installing Rust:
@@ -87,7 +87,7 @@ installed: `ARCH=arm64 container/build.sh`. CI builds them natively instead.
 Rust 1.85 or newer:
 
 ```sh
-cargo build --release --workspace     # → target/release/{mppd,mppctl}
+cargo build --release --workspace     # → target/release/{oppd,oppctl}
 ```
 
 Before every commit run the checks in [CONTRIBUTING.md](CONTRIBUTING.md) §3, and install
@@ -96,8 +96,8 @@ the privacy pre-commit hook (§4).
 ## Running
 
 ```sh
-mppctl --version
-mppd                      # currently prints the supported digitizers and exits
+oppctl --version
+oppd                      # currently prints the supported digitizers and exits
 ```
 
 Once the daemon is functional it needs read/write access to the digitizer's
@@ -108,7 +108,7 @@ Once the daemon is functional it needs read/write access to the digitizer's
 podman run --rm \
   --device /dev/hidraw2 \
   -v /run/dbus/system_bus_socket:/run/dbus/system_bus_socket \
-  mpp-linux:glibc
+  open-pen-protocol:glibc
 ```
 
 A NixOS module and distribution packages come later.

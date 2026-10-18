@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Protocol types shared by `mppd` and `mppctl`.
+//! Protocol types shared by `oppd` and `oppctl`.
 //!
 //! Everything here is written from `docs/protocol/`. Nothing is derived from
 //! decompiled code (see CONTRIBUTING.md §6).

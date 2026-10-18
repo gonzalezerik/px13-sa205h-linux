@@ -82,7 +82,7 @@ Confirm from Linux capture 01 (`hid-recorder` shows per-collection report sizes;
 collection will simply have no node). Either way `hidraw` exposes the whole device, so our daemon
 can reach every report regardless.
 
-## 4. What this means for mppd
+## 4. What this means for oppd
 
 - Nothing on this device needs to be written for pen parity: touch (R1), pen (R7) and pairing
   reads are inputs/features; the writes Windows performs are R3 commands (confirmed — the ELAN

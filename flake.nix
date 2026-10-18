@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 {
-  description = "mpp-linux: Linux support for MPP 2.6 haptic pens";
+  description = "Open Pen Protocol: Linux support for MPP 2.6 haptic pens";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/44a91898084f46797b5fac650c7e8c9ac38c43d4";
 
@@ -15,7 +15,7 @@
       # compile rustc first. CI treats both the same (see docs/decisions.md).
       packages = forAll (pkgs: {
         default = pkgs.rustPlatform.buildRustPackage {
-          pname = "mpp-linux";
+          pname = "open-pen-protocol";
           version = (fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
           src = pkgs.lib.fileset.toSource {
             root = ./.;
@@ -25,7 +25,7 @@
           meta = {
             description = "Linux support for MPP 2.6 haptic pens";
             license = pkgs.lib.licenses.agpl3Plus;
-            mainProgram = "mppd";
+            mainProgram = "oppd";
             platforms = systems;
           };
         };
