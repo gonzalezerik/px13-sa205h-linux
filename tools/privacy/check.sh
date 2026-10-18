@@ -32,6 +32,10 @@ echo "== privacy gate =="
 forbidden='^(captures/|artifacts/)|\.(btsnoop|pcapng?|etl|esd|wim|exe|msi|msix|msixbundle|cab|sys)$'
 bad=$(printf '%s\n' "$files" | grep -E "$forbidden" || true)
 [ -z "$bad" ] || err "forbidden files tracked: $(echo $bad)"
+if [ -f .git/info/exclude ]; then
+  bad=$(git ls-files -ci --exclude-from=.git/info/exclude || true)
+  [ -z "$bad" ] || err "tracked files match .git/info/exclude: $(echo $bad)"
+fi
 
 [ -n "$files" ] || { echo "Privacy gate passed (nothing to check)."; exit 0; }
 
