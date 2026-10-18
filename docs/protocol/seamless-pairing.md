@@ -139,11 +139,33 @@ OOB-vs-Just-Works half of the distinction is still open; the Linux pairing run a
 When each lands, upgrade the matching HYPOTHESIS lines above to VERIFIED-HW or mark them wrong —
 do not delete them, annotate.
 
-## 6. Implementation (landed 2026-10-17)
+## 6. Implementation (landed 2026-10-17, corrected 2026-10-18)
 
 `oppd watch-pair` runs this model end to end: it parses report 110 (`0x6E`) off the digitizer's
-hidraw node (`opp_core::seamless`), then drives BlueZ — `org.bluez.Adapter1.ConnectDevice` with
-`AddressType "le"` for the announced random-static address, `org.bluez.Device1.Pair`, then
-`Trust`. `oppd pairing-state` reads feature 112 (`0x70`) and nothing else; §4's write ban holds —
-the daemon writes no output report and no unclassified feature. `--dry-run` prints the
-notifications and stops there. Open item 4 closes on the first live bonding run.
+hidraw node (`opp_core::seamless`), then drives BlueZ. The announced address is a random static
+one (§2 step 5, VERIFIED-HW), so the call is `org.bluez.Adapter1.ConnectDevice` with
+`AddressType "random"` — BlueZ accepts only `public`/`random`; `"le"` is not a value its API
+takes. Then `org.bluez.Device1.Pair`, then the device's `Trusted` property is set.
+`oppd pairing-state` reads feature 112 (`0x70`) and nothing else; §4's write ban holds — the
+daemon writes no output report and no unclassified feature. `--dry-run` prints the notifications
+and stops there.
+
+Two deployment facts, neither of which was in the first version of this section:
+
+- On BlueZ 5.87 `ConnectDevice` is `[experimental]`: the plain daemon does not export it, and the
+  call answers `org.freedesktop.DBus.Error.UnknownMethod`. Shipping a tool that requires
+  `--experimental` is not acceptable, so that error is the normal path: oppd falls back to the
+  kernel directly through a D-Bus-activated helper (`opp-pair-helper`, bus name
+  `org.openpenprotocol.PairHelper1`), which opens an `HCI_CHANNEL_CONTROL` management socket and
+  sends `MGMT_OP_PAIR_DEVICE` with LE-random address type and `NoInputNoOutput` I/O capability —
+  Just Works, no PIN UI. The helper checks the polkit action `org.openpenprotocol.pair-pen`
+  against the calling connection before it opens anything, accepts only random static addresses,
+  and does nothing besides pairing. Setting `Trusted` afterwards is done by the user's own oppd.
+  A stale stored bond (dual-boot re-pair) is handled by removing the device and re-running the
+  handshake.
+- The kernel fallback itself is HYPOTHESIS until the hardware session confirms it on this pen:
+  it follows BlueZ's `mgmt-api.txt`, but a kernel-initiated bond followed by GATT discovery and
+  the HID-over-GATT probe has not been observed on this hardware yet. (Hovering, report `0x6E`
+  and the digitizer side need no bond at all — findings/006 §3, §7.5.)
+
+Open item 4 closes on the first live bonding run.

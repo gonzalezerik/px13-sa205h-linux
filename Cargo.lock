@@ -677,6 +677,14 @@ name = "opp-core"
 version = "0.0.1"
 
 [[package]]
+name = "opp-pair-helper"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "zbus",
+]
+
+[[package]]
 name = "opp-settings"
 version = "0.0.1"
 dependencies = [
