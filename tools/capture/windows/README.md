@@ -78,6 +78,34 @@ traces are armed. After session 03, the remaining sessions can run in any
 order — and so may any host: the Linux pairing script must wait for session
 03 too.
 
+## Trace recipe that works on this build (learned 2026-10-17)
+
+The WPR **InputOnlyProfile captures no pen data here** — verified twice (boot
+run: 108 events; runtime run: 93 events; metadata only). Use `logman` for pen
+I/O instead:
+
+```bat
+logman create trace mpp-io -p "Microsoft-Windows-SPB-HIDI2C" 0xff 0xff ^
+  -p "Microsoft-Windows-Input-HIDCLASS" 0xff 0xff ^
+  -o C:\mpp-captures\NN-name\input.etl
+logman start mpp-io
+rem ... session actions ...
+logman stop mpp-io
+```
+
+For a richer rundown add the TabletPC and UI-Input-Inking providers the same
+way (if a name is rejected, find the exact spelling with
+`logman query providers | findstr /i "tablet input"`). **BluetoothStack.wprp
+via `wpr -start` does work** — it caught the pairing, SMP and haptics
+traffic. Boot-mode syntax: `wpr -addboot <path>\BusesAllProfile.wprp!InputOnlyProfile
+-filemode` (the `.Verbose.File` suffix is rejected; `-filemode` selects it),
+stopped with `wpr -stopboot <file> "<note>"`. `SpbCxWppTrace.cmd start
+autologger <file.etl>` needs the full path and self-stops at its 100 MB cap
+about two minutes into boot; run `SpbCxWppTrace.cmd stop` by full path
+afterwards regardless. Caveat: HIDI2C events carry timing only, never report
+bytes — byte-level digitizer traffic can only come from the Linux
+hid-recorder capture.
+
 ## Session 00 — inventory
 
 Answers: which drivers own the pen/digitizer, and where their settings are.
@@ -123,8 +151,8 @@ mkdir C:\mpp-captures\01-boot && cd /d C:\mpp-captures\01-boot
 copy C:\kit\BusesAllProfile.wprp .
 copy C:\kit\SpbCxWppTrace.cmd .
 log "s01: registering boot traces"
-wpr -start BusesAllProfile.wprp!InputOnlyProfile.Verbose.File -start
-SpbCxWppTrace.cmd start autologger
+wpr -addboot C:\mpp-captures\01-boot\BusesAllProfile.wprp!InputOnlyProfile -filemode
+C:\mpp-captures\01-boot\SpbCxWppTrace.cmd start autologger C:\mpp-captures\01-boot\spb-boot.etl
 shutdown /r /t 0
 ```
 
@@ -141,14 +169,15 @@ Hover the pen over the screen for ~5 s, draw one slow line, then:
 
 ```bat
 log "s01: stopping boot traces"
-wpr -stop C:\mpp-captures\01-boot\boot-input.etl
-SpbCxWppTrace.cmd stop autologger
-copy C:\PerfLogs\Admin\SpbCxWpp_Session\*.etl C:\mpp-captures\01-boot\
+wpr -stopboot C:\mpp-captures\01-boot\boot-input.etl "s01 boot trace"
+C:\mpp-captures\01-boot\SpbCxWppTrace.cmd stop
 ```
 
-If `wpr -start … -start` rejects the profile, fall back to
-`usb/tracing/BusesTrace.cmd` from the same pinned repo (same bus providers,
-built-in boot-trace mode) and note it in the session log.
+Expect both boot traces to be thin or early-capped (InputOnlyProfile logs
+almost nothing; the SPB autologger self-stops at 100 MB within ~2 min of
+boot). The pen's steady-state I/O belongs in a runtime `logman` session —
+see the recipe above; that is what produced usable 2026-10-17 data
+(~266 HIDI2C reads/s while tracking).
 
 ## Session 02 — inking quality
 
@@ -160,9 +189,13 @@ end-to-end through the same page we will run on Linux.
 
 ```bat
 mkdir C:\mpp-captures\02-inking && cd /d C:\mpp-captures\02-inking
-wpr -start BusesAllProfile.wprp!InputOnlyProfile.Verbose.File
+logman create trace mpp-s02 -p "Microsoft-Windows-SPB-HIDI2C" 0xff 0xff ^
+  -p "Microsoft-Windows-Input-HIDCLASS" 0xff 0xff ^
+  -o C:\mpp-captures\02-inking\input-i2c.etl
+logman start mpp-s02
 log "s02: input trace started"
 ```
+(InputOnlyProfile is intentionally not used — see the trace recipe.)
 
 Open `C:\kit\pen-test.html` in Edge, press **Start** in the page, then perform,
 with a `log` line before each:
@@ -181,7 +214,7 @@ Press **Stop** in the page, **Export JSON** → save as
 `pen-test-s02.json` in the session folder, then:
 
 ```bat
-wpr -stop C:\mpp-captures\02-inking\input.etl
+logman stop mpp-s02
 log "s02: done"
 ```
 
@@ -222,8 +255,10 @@ name), then:
 
 ```bat
 wpr -stop C:\mpp-captures\03-pairing\pair.etl
-pnputil /enum-devices /connected /class HID > hid-after.txt
+powershell "Get-PnpDevice -PresentOnly -Class HIDClass" > hid-after.txt
 ```
+(`pnputil /enum-devices /connected /class HID` returns nothing on this
+build — use the PowerShell form.)
 
 ## Session 04 — haptics
 
@@ -231,6 +266,17 @@ Answers: when the haptics host triggers, what intensity/on-off map to, which
 apps get haptic ink, and **where the settings persist** (static analysis
 narrowed the store to the registry or the per-user settings store — this
 session proves which).
+
+2026-10-17 learnings for this session: the cleanest repeatable buzz stimulus
+is dragging a window over the Snap Layouts targets (each flyout box and each
+screen edge = one host-commanded buzz). Buzzes were confirmed to be one ATT
+Write Command per buzz to the pen's haptic OUTPUT report over Bluetooth —
+never over the digitizer. Because the Bluetooth driver's event log truncates
+ACL payloads to 11 bytes, the payload values (waveform, intensity) cannot be
+recovered from traces: read the pen's haptics FEATURE reports over HID on
+Windows instead (GET_REPORT only — no writes), which also yields the
+supported-waveform list. **The persistence snapshots below were not taken on
+2026-10-17 — this part still needs a run.**
 
 ```bat
 mkdir C:\mpp-captures\04-haptics && cd /d C:\mpp-captures\04-haptics
