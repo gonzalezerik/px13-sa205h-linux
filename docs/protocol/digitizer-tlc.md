@@ -8,6 +8,10 @@ structure facts are STATIC (descriptor bytes; TLC byte offsets given); every *pu
 is HYPOTHESIS unless cited. Nothing here was sent to the device — per CONTRIBUTING.md §6 no writes and no
 unproven reads were performed.
 
+**Update 2026-10-17:** runtime confirmation arrived — Windows capture sessions 00–08, a Linux
+`hid-recorder` session, and offline frame analysis; all recorded in
+`findings/006-hardware-capture-results.md`. Annotations are inline below.
+
 Device: **ELAN9008:00 04F3:4631**, I2C-HID on AMDI0010:00 (i2c-0), bound to `hid-multitouch`.
 On Linux it creates 7 input nodes: the touchscreen node, a "Stylus" node, and five "UNKNOWN"
 nodes (event8, event10–13) from the vendor collections below.
@@ -67,11 +71,11 @@ Buckets: **safe-to-read** (passive input only, no side effects possible), **comm
 | 0xFF00/0xC5 R68 (Feature 256 B) | command-adjacent — **do not read yet** | Feature read *could* be harmless, but unproven; rule: GET_FEATURE only once proven non-destructive. Session 01 will show whether Windows reads it at boot. |
 | 0x01FF/0x01 R2 (Input 64 B) | dangerous (rule) | Response side of the maintenance channel paired with R3; input-only, so it only ever answers an R3 command. **Confirmed live use**: the ELAN WoT service reads it for command responses (findings/005). Passive observation is harmless, but nothing should be initiated. |
 | 0xFF00/0x01 R3 (Output 32 B) | **dangerous (rule)** | Host→device command channel; paired with R2 responses. **Confirmed live use**: the ELAN WoT service writes all six of its commands here — WoT enable/disable `F0 2F 00 01/00`, IC sleep/wake `54 05 05 01`/`54 85 05 01`, IC reset `77 77 77 77`, FW-version query `53 00 00 01` (findings/005). Never write. |
-| 0xFF00/0x81 R23 (Input 64 B) | safe-to-read (passive) | Unsolicited 64-byte input; no known trigger. HYPOTHESIS: async status/event channel. Observing costs nothing (hid-recorder capture will show whether it ever emits). |
+| 0xFF00/0x81 R23 (Input 64 B) | safe-to-read (passive) | Unsolicited 64-byte input; no known trigger. HYPOTHESIS: async status/event channel. Observing costs nothing (hid-recorder capture will show whether it ever emits). [**observed 2026-10-17**: emitted nothing during an 84 s capture that included hover, drawing, erasing and barrel presses — scoped negative, findings/006 §3] |
 | 0xFF0B/0x0B (Features 41–45,72; Inputs 46–54) | **dangerous (rule)** | Feature=command / Input=response pairs with block sizes 15→510 B (features) and 15→7487 B (inputs) — a flash-page/block pattern. HYPOTHESIS: ELAN ICP (in-circuit programming) = firmware update + config/diagnostics channel. ASUS ships ELAN firmware packages; the updater would use exactly this. Never read or write. |
 | 0xFF0F/0x60 R25 (Output 4 B + Input 4 B) | command — writes forbidden | Smallest command/response pair. Static analysis of the WoT service **disproved** the Wake-on-Touch candidate: the WoT service never references page 0xFF0F (findings/005) — WoT is an R3 command. Consumer still unknown; session 01 will show whether anything writes R25 at all. |
-| 0xFF0F/0x50 R34 (Input 16 B) | safe-to-read (passive) | Four signed 32-bit values (0x72–0x75). HYPOTHESIS: telemetry/statistics (e.g. touch counts, errors). |
-| 0xFFF4/0x01 (R86/110/111/112) | command (pairing) — see seamless-pairing.md | Already modelled in `docs/protocol/seamless-pairing.md`; R111 is the only write and stays banned until the pairing flow is approved. |
+| 0xFF0F/0x50 R34 (Input 16 B) | safe-to-read (passive) | Four signed 32-bit values (0x72–0x75). HYPOTHESIS: telemetry/statistics (e.g. touch counts, errors). [**answered 2026-10-17**: pen-presence telemetry — `0x72` carries the in-range pen's transducer serial (little-endian), `0x73–0x75` read zero; every R34 in the Linux capture precedes a 0xFFF4 pairing report (110) by a few milliseconds (findings/006 §3)] |
+| 0xFFF4/0x01 (R86/110/111/112) | command (pairing) — see seamless-pairing.md | Already modelled in `docs/protocol/seamless-pairing.md`; R111 is the only write and stays banned until the pairing flow is approved. [**verified 2026-10-17**: R110 fires spontaneously, on Windows *and* bare Linux (flag `0x03`/`0x01`); consumer is the Windows Bluetooth stack; feature 112 reads `01`; feature 86 fails `GetFeature` with error 122 from user mode (findings/006 §2–3)] |
 
 ### 3.1 Node mapping gap [HYPOTHESIS]
 Six vendor TLCs carry input reports (R2, R23, R46–54, R25, R34, R110) but only **five** UNKNOWN
@@ -91,6 +95,8 @@ can reach every report regardless.
 - Passive observation (hid-recorder capture on all event nodes) is free and will show whether
   R2/R23/R34 ever emit unsolicited data — that alone upgrades their purpose hypotheses.
 - What Windows *reads* at boot (R68? R72? R86?) is answered by Windows session 01 (boot trace).
+  [**not answered as hoped**: the SPB-HIDI2C provider logs read *timing* only, no payload, and
+  HIDCLASS does not trace feature reads — still open]
 - ElanTouchXiSvc.exe touches exactly R3 (write) + R2 (read) — answered by findings/005.
 
 ## 5. Open items
@@ -98,6 +104,8 @@ can reach every report regardless.
 1. R68 blob content + whether Windows reads it at boot (session 01).
 2. ~~R25 command semantics (static analysis + session 01)~~ — WoT ≠ R25 (findings/005);
    consumer still unknown, session 01 may show an R25 write at boot if any exists.
-3. R23/R34 emitters (hid-recorder capture).
+3. ~~R23/R34 emitters (hid-recorder capture).~~ — answered 2026-10-17: R34 is pen-presence
+   telemetry (serial in the first word) leading each pairing notification; R23 stayed silent
+   (findings/006 §3).
 4. Node-mapping hypothesis §3.1 (Linux capture 01).
 5. 0xFF0B purpose (firmware updater not in our artifact set; classification stands on the rule).

@@ -5,6 +5,10 @@ HID descriptor and unpacked driver packages — see `findings/002-elan-driver-pa
 evidence and hashes) or explicitly labelled HYPOTHESIS. Nothing in this flow has been observed on
 the wire yet; that is Windows capture session 3.
 
+**Update 2026-10-17:** the flow has since been captured (Windows sessions 03 + 08, Linux step 1) and
+is VERIFIED-HW as annotated below — the original hypothesis text is kept and marked, per the note at
+the end of this file. Full evidence: `findings/006-hardware-capture-results.md` §2–3 and §7.
+
 Confidence labels per CONTRIBUTING.md §5: VERIFIED-HW / STATIC / DOC / HYPOTHESIS.
 
 ## 1. What the hardware exposes [STATIC]
@@ -37,7 +41,7 @@ Observations that drive the model:
   No inbox Windows component reads that property or these reports (82-binary negative,
   findings/002 §2), so a user-mode consumer is expected — ASUS Store app(s), or none at all.
 
-## 2. Working model of the flow [HYPOTHESIS — everything below this line in this section]
+## 2. Working model of the flow [originally HYPOTHESIS; annotated with capture results 2026-10-17]
 
 Actors: **pen** (SA205H, BLE/classic BT HID device, MPP 2.6), **digitizer** (ELAN9008, on I2C, also
 in MPP RF range of the pen), **PC host software** (unknown consumer; candidate: ASUS Store app via
@@ -52,15 +56,29 @@ in MPP RF range of the pen), **PC host software** (unknown consumer; candidate: 
 3. The digitizer notifies the host with **input report 110**: 6-byte candidate BD_ADDR (usage 0x02)
    + two state bits (usage 0x08 "address valid / pairing request?", usage 0x11 "pairing result /
    state?"). [HYPOTHESIS — bit meanings unconfirmed]
+   **[VERIFIED-HW — session 08 run 2 + Linux capture]** the report fires spontaneously ~0.10–0.15 s
+   after the tip touches: 6-byte BD_ADDR **little-endian** + one flag byte. Flag is `0x03` while the
+   Windows consumer is active and `0x01` on bare Linux with no consumer — the second bit only
+   appears with the Windows stack listening; its meaning stays HYPOTHESIS.
 4. The host consumer reads **feature 86** (6-byte buffer + 1 bit) — possibly the digitizer's own
-   address or an OOB pairing token/TK. [HYPOTHESIS]
+   address or an OOB pairing token/TK. [HYPOTHESIS — **unconfirmed**: `HidD_GetFeature` on 86 fails
+   with error 122 from user mode on 25H2, and kernel-side reads are not visible in our traces]
 5. The host starts Bluetooth pairing for the address from 110, supplying OOB data if available
    (Windows `BluetoothDeviceCustomPairing` + DAF OOB path), so no PIN/confirmation UI appears.
+   **[VERIFIED-HW for the connect — sessions 03 + 08]** the host disables its background scan
+   **2 ms** after report 110, adds the address (type **random**) to the accept list and sends LE
+   Extended Create Connection straight to it; no advertising report from the pen is ever used.
+   Pairing is **LE legacy SMP** with full key distribution both ways. The OOB part remains
+   HYPOTHESIS — SMP payload bytes are truncated in the trace.
 6. On success the host writes **output report 111**: 6-byte BD_ADDR + 1 bit + **16-byte link key**
    (usage 0x14) — relaying the key to the pen through the digitizer→pen MPP channel so the pen can
    complete/confirm the encrypted link. [HYPOTHESIS — this is the "coupling channel" the INF name
    suggests: the digitizer couples the PC and the pen by carrying key material both ways.]
-7. Feature 112 (1 bit) is a simple enable/ready flag for the whole mechanism. [HYPOTHESIS]
+   **[STILL OPEN]** user-mode tracing cannot see host→device HID writes; whether Windows ever
+   writes report 111 is unobserved. The first Linux tap-to-pair run (no 111 write at all) is the
+   decisive test: if plain Just Works bonds, step 6 is optional.
+7. Feature 112 (1 bit) is a simple enable/ready flag for the whole mechanism. [HYPOTHESIS — the
+   read-back value `01` on Windows is **VERIFIED-HW**; the meaning of the bit is not]
 
 Alternative model (equally consistent with all static evidence so far): the digitizer firmware does
 steps 2–4 and 6 entirely on its own over the MPP link, Windows pairs with plain SSP just-works
@@ -68,15 +86,26 @@ steps 2–4 and 6 entirely on its own over the MPP link, Windows pairs with plai
 session-3 trace distinguishes these: OOB model ⇒ HCI `Remote OOB Data Request/Reply` + SSP with
 OOB flag in the btsnoop/ETL; firmware model ⇒ plain SSP with no user interaction and no host HID
 traffic on 110/111 beyond maybe a read.
+**[ANNOTATED 2026-10-17]** the *who* is resolved: the consumer is **Windows' own Bluetooth stack** —
+`bthserv` + DeviceAssociationService start working at the connect moment, ELAN's INF ships no
+service, and tap-to-pair completed on a Windows install with **no ASUS apps present at all**. The
+OOB-vs-Just-Works half of the distinction is still open; the Linux pairing run answers it.
 
 ## 3. Field-level open questions
 
 - Exact semantics of usages 0x02/0x03/0x08/0x09/0x10/0x11/0x14 — vendor-defined, no public ELAN doc
-  found. [unknown]
+  found. [unknown — the 0x08/0x11 bit pair is now *observed* as one flag byte: `0x03` with the
+  Windows consumer active, `0x01` on bare Linux; meanings still unknown]
 - Whether report 110 fires spontaneously (on pen approach) or only after a feature write arms it.
+  [**RESOLVED 2026-10-17**: spontaneous and unarmed — nine spontaneous reports in an 84 s Linux
+  capture with no vendor driver, one per pen touch/range event]
 - Byte order of the BD_ADDR fields (little vs big endian) — resolvable from a capture.
+  [**RESOLVED 2026-10-17**: little-endian; the Linux reports carry byte-for-byte the address the
+  Windows host connected to]
 - Whether the 16-byte field is the link key, a temporary key/TK, or a MPP-encrypted blob.
 - Whether re-pairing (pen already paired to this PC, pen reset) reuses the same reports.
+  [partially observed: a *paired* pen re-entering range triggers another `0x6E` with the same
+  address; a factory-reset re-pair has not been tested]
 
 ## 4. Safety rules while investigating (CONTRIBUTING.md §6)
 
@@ -93,11 +122,19 @@ traffic on 110/111 beyond maybe a read.
 
 1. Windows capture session 3 ETLs (BluetoothStack + input): shows the real flow, which side initiates,
    whether HCI OOB commands appear, and correlates report 110 timing with the pairing events.
+   [**done** — sessions 03 + 08; flow verified, timing correlated; OOB flags not visible in the
+   truncated HCI payloads. findings/006 §2]
 2. Store-app RE (MyASUS / ProArt Creator Hub / ScreenXpert): find (or rule out) the consumer that
-   reads 110/86 and writes 111.
+   reads 110/86 and writes 111. [**ruled out for pairing** — tap-to-pair works with no ASUS apps
+   installed; the consumer is the Windows Bluetooth stack. Store-app RE stays relevant only for
+   optional UX, not for the mechanism]
 3. Linux-side passive capture: pen advertisement contents (does the unpaired pen
    advertise a BD_ADDR-based name?), and whether the ELAN driver on Linux (`hid-multitouch`/
-   `hid-asus`) touches any 0xFFF4 report at probe time.
+   `hid-asus`) touches any 0xFFF4 report at probe time. [**done** — the pen never advertises
+   (210 reports captured, none from it); Linux HID drivers leave report 110 unconsumed and it
+   keeps firing. findings/006 §3, §7.5]
+4. [new] Whether output report 111 must be written for pairing to succeed — answered by the first
+   Linux tap-to-pair run, which pairs with no 111 write (write ban intact, CONTRIBUTING.md §6).
 
 When each lands, upgrade the matching HYPOTHESIS lines above to VERIFIED-HW or mark them wrong —
 do not delete them, annotate.

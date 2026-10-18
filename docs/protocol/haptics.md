@@ -10,6 +10,10 @@ extracted from `artifacts/windows/win11-25h2-26200.8873-consumer-x64-en-us.esd` 
 reproduced here, only behaviour. Nothing has been observed on the wire yet — that is the Windows
 capture session 4 and the Linux captures.
 
+**Update 2026-10-17:** the wire verification has landed (Windows sessions 04/05 + direct-send feel
+tests; `findings/006-hardware-capture-results.md` §4). The static model below is kept as written and
+annotated; the new §2.7 records what was observed on this pen.
+
 Confidence labels per CONTRIBUTING.md §5: VERIFIED-HW / STATIC / DOC / HYPOTHESIS.
 
 ## 1. Wire level [DOC]
@@ -21,7 +25,8 @@ Stylus top-level collection. Three report kinds matter:
   - **Waveform List (0x0E/0x10)** — ordinal-indexed (Ordinal page 0x0A, usages ≥ 3) list of the
     waveform IDs the device supports. Ordinals 1 (**None**) and 2 (**Stop**) are implicit.
   - **Duration List (0x0E/0x11)** — duration in ms per ordinal; **0 means continuous** (plays
-    until stopped or cut off).
+    until stopped or cut off). [annotated 2026-10-17: this device reports ≈2 s durations for its
+    continuous waveforms instead of 0 — §2.7.3]
 - **Output — playback** (the only report the host writes):
   - **Manual Trigger (0x0E/0x21)** — an **ordinal** into the device's waveform table (1=None,
     2=Stop, 3+ = Waveform List entries), *not* a waveform ID.
@@ -145,6 +150,47 @@ handwriting-panel flag. So the persisted value is read by the
 `PenDevice`/`PenSettings` API surface. HYPOTHESIS: per-pen haptics on/off + intensity live in
 the per-user settings store (registry or CDP), read by the shell/input producer. Decisive test:
 Windows capture session 4 (registry + settings-store diff around a haptics toggle).
+**[RESOLVED 2026-10-17 — capture session 04, VERIFIED-HW]** the hypothesis was right, concretely:
+a per-user registry key, `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Windows\EnhancedPenSupport`
+— `PenFeedbackEnabled`, `PenInkFeedbackEnabled`, `PenInteractionFeedbackEnabled` (DWORD 0/1 =
+master / while-inking / while-interacting) plus `PenFeedbackIntensity` as a **QWORD IEEE-754 double
+= slider/100** (observed 0.49 → 1.0 across a slider move). A synced copy lives in the CloudStore
+`pensettings` blob; touchpad and mouse keep sibling keys in the same key. ISM.dll itself still
+touches no settings storage (§2.4.5 unchanged) — the message producer reads these.
+
+### 2.7 Wire verification on this pen (2026-10-17 captures) [VERIFIED-HW]
+
+Full evidence, including the felt-impressions panel and per-test timelines:
+`findings/006-hardware-capture-results.md` §4. Headlines:
+
+1. **Transport**: the haptics collection lives on the pen's **BLE HID-over-GATT** side. Windows'
+   playback goes out as an **ATT Write Command (0x52) to handle `0x0021`**; `HidD_SetOutputReport`
+   (ATT Write Request) is accepted by the pen as well.
+2. **Output report `0x41`, 7 bytes**: `41 <repeat> <intensity> <manual-trigger ordinal>
+   <cutoff ×10 ms> <retrigger lo> <hi>` — one write per effect, matching §2.2's five-field model.
+   Confirmed by direct sends the maintainer felt (`41 01 FF 03 00 00 00` = one click at full
+   intensity).
+3. **Feature `0x42` (capabilities)**: auto-trigger control `0x000D0042` = **Tip Switch**; waveform
+   list `0x1003, 0x1006–0x1011` → **ordinals 3–15** = click, press, release, hover, success, error,
+   then continuous ink/pencil/marker/chisel/brush/eraser/sparkle; durations (ms)
+   `[45, 60, 60, 35, 145, 185, 1995, 1995, 1995, 1995, 1980, 1995, 1980]` — continuous entries are
+   ≈2 s, **not 0** (§1 annotation). **Feature `0x41`** (current state): repeat 0, intensity `FF`,
+   auto-trigger 1, retrigger 0. **Feature `0x40`**: pen identity (transducer serial + vendor
+   `0x330A`, `0x0C0F`, `0x0003`).
+4. **The device auto-triggers on the tip switch**: the same continuous report is felt as nothing in
+   the air and as "writing on paper" while drawing — the host arms the configuration and the pen
+   decides when to play, exactly the §1 "host never uses Auto Trigger" model with the device-side
+   half now observed.
+5. All 13 effects were felt and are subjectively distinct (pencil scratchiest and audible, brush
+   smoothest, sparkle "rubbery"). `0xFF` intensity = full; `0x40` (≈ the 25 % slider byte) is still
+   felt, perceived strength unclear.
+6. The pen lacks Collide/Align/Step/Grow, so Windows' snap-target buzzes exercise the **Click
+   fallback** of §2.4.4 on real hardware.
+7. Ordinary apps drive ink haptics through the same path: OneNote and Paint produced ~100/~25
+   stroke-related writes each, with the paper texture confirmed present. Settings toggles send no
+   preview write.
+8. Not all buzz is host-commanded: the top-button press-and-hold buzz has **no host write** behind
+   it (pen-local feedback — findings/006 §5).
 
 ## 3. What oppd must reproduce (normative checklist)
 
@@ -160,12 +206,16 @@ Windows capture session 4 (registry + settings-store diff around a haptics toggl
 6. Intensity is a percentage supplied by the settings layer at play time, not stored in the
    daemon. [STATIC §2.4.5]
 7. Continuous waveforms: duration 0 in the device's list; start is device-side (tip contact);
-   the host only sets a cutoff. [DOC §1]
+   the host only sets a cutoff. [DOC §1 — annotated 2026-10-17: this pen's list carries ≈2 s, not
+   0; start-side confirmed (§2.7.4)]
 
 ## 4. Open items
 
 - Notification-type enum semantics (which of 0–4 is hover-enter vs. press etc.) — needs the
   message producer or Windows capture session 4 traces. [HYPOTHESIS]
-- Persistence location (§2.6) — session 4.
+- Persistence location (§2.6) — session 4. [**resolved 2026-10-17** — §2.6 annotation,
+  findings/006 §4]
+- Ordinal 2 (Stop) behaviour on this pen has not been exercised — the direct-send panel covered
+  3/7/8/9/11 and the continuous set. [open]
 - Exact report IDs/sizes for the SA205H come from the captured descriptor
   (`fixtures/px13-hn7306/`), not from this doc.
