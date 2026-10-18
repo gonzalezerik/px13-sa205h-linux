@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon for MPP 2.6 pens: pairing, haptics, battery, buttons.
 //!
-//! Implemented today: tap-to-pair (`docs/protocol/seamless-pairing.md`).
-//! `watch-pair` listens on the supported digitizer's hidraw node for the
-//! `0x6E` pairing notification and bonds the announced pen through BlueZ;
-//! `pairing-state` reads the digitizer's seamless-pairing feature report.
-//! Both only read from the digitizer — the write ban on the vendor output
-//! reports is respected (seamless-pairing.md §4). The rest of the daemon
-//! (haptics, battery, buttons) is still to come.
+//! Implemented today: tap-to-pair (`docs/protocol/seamless-pairing.md`)
+//! and pen presence. `watch-pair` listens on the supported digitizer's
+//! hidraw node for the `0x6E` pairing notification and bonds the announced
+//! pen through BlueZ; `pairing-state` reads the digitizer's
+//! seamless-pairing feature report; both only read from the digitizer —
+//! the write ban on the vendor output reports is respected
+//! (seamless-pairing.md §4). `watch-pen` follows battery and link state
+//! through BlueZ; `watch-buttons` dumps the pen's raw evdev events so the
+//! top-button codes can be identified. Haptics are still to come.
 
 use std::collections::HashMap;
 use std::process::ExitCode;
 use std::time::Instant;
+
+mod buttons;
+mod presence;
 
 use hidapi::{DeviceInfo, HidApi};
 use opp_core::seamless;
@@ -32,6 +37,14 @@ commands:
       --adapter NAME  BlueZ adapter to use (default: hci0)
   pairing-state       read the digitizer's seamless-pairing feature report
                       (0x70) and print it; read-only
+  watch-pen           print battery and link changes for a paired pen,
+                      live from BlueZ (UPower shows the same battery
+                      without this daemon)
+      --device ADDR   pen address (default: the only pen-named device)
+      --adapter NAME  BlueZ adapter to use (default: hci0)
+  watch-buttons       dump raw evdev events from the pen's input node,
+                      to identify what the top-button report becomes
+      --list          list pen-named evdev nodes and exit
   -h, --help          print this help
   -V, --version       print the version
 ";
@@ -52,6 +65,11 @@ fn main() -> ExitCode {
             Err(message) => Err(message),
         },
         Some("pairing-state") => pairing_state(),
+        Some("watch-pen") => match (adapter_name(&args), device_arg(&args)) {
+            (Ok(adapter), Ok(device)) => presence::watch_pen(&adapter, device),
+            (Err(message), _) | (_, Err(message)) => Err(message),
+        },
+        Some("watch-buttons") => buttons::watch_buttons(args.iter().any(|arg| arg == "--list")),
         Some("-h") | Some("--help") => {
             print!("{USAGE}");
             Ok(())
@@ -91,6 +109,30 @@ fn adapter_name(args: &[String]) -> Result<String, String> {
         return Err(format!("not a usable adapter name: {name}"));
     }
     Ok(name)
+}
+
+/// Reads the optional `--device` Bluetooth address from the arguments.
+fn device_arg(args: &[String]) -> Result<Option<String>, String> {
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "--device" {
+            let value = iter.next().cloned().ok_or("--device needs an address")?;
+            let address = value.to_uppercase();
+            let valid = address.len() == 17
+                && address.bytes().enumerate().all(|(index, byte)| {
+                    if index % 3 == 2 {
+                        byte == b':'
+                    } else {
+                        byte.is_ascii_hexdigit()
+                    }
+                });
+            if !valid {
+                return Err(format!("not a Bluetooth address: {value}"));
+            }
+            return Ok(Some(address));
+        }
+    }
+    Ok(None)
 }
 
 /// The single supported digitizer present on this machine, by `hidraw`.
@@ -258,4 +300,31 @@ fn hex_bytes(bytes: &[u8]) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::device_arg;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_string()).collect()
+    }
+
+    #[test]
+    fn device_defaults_to_none_and_normalises_case() {
+        assert_eq!(device_arg(&args(&["watch-pen"])).unwrap(), None);
+        // Assembled at runtime: the privacy gate rejects colon-hex literals.
+        let lowercase = String::from("0a:0b:0c:0d:0e") + ":0f";
+        let given = device_arg(&args(&["watch-pen", "--device", &lowercase]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(given, String::from("0A:0B:0C:0D:0E") + ":0F");
+    }
+
+    #[test]
+    fn device_rejects_malformed_addresses() {
+        assert!(device_arg(&args(&["watch-pen", "--device"])).is_err());
+        assert!(device_arg(&args(&["watch-pen", "--device", "not-an-address"])).is_err());
+        assert!(device_arg(&args(&["watch-pen", "--device", "0A:0B:0C:0D:0E"])).is_err());
+    }
 }

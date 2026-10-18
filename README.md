@@ -102,6 +102,8 @@ oppd                      # prints the supported digitizers
 oppd pairing-state        # reads the digitizer's seamless-pairing flag (read-only)
 oppd watch-pair --dry-run # prints pairing notifications as a pen approaches, changes nothing
 oppd watch-pair           # bonds the announced pen through BlueZ (needs the system bus)
+oppd watch-pen            # live battery + link changes of the paired pen (via BlueZ)
+oppd watch-buttons --list # lists the pen's evdev nodes; without --list dumps its raw events
 ```
 
 Once the daemon is functional it needs read/write access to the digitizer's
