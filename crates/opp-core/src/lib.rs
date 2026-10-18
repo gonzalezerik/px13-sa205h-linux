@@ -4,6 +4,8 @@
 //! Everything here is written from `docs/protocol/`. Nothing is derived from
 //! decompiled code (see CONTRIBUTING.md §6).
 
+pub mod seamless;
+
 /// A USB-IF vendor/product pair identifying a HID device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HidId {
