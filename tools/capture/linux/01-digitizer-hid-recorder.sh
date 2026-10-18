@@ -48,8 +48,15 @@ sudo hid-recorder "$node" | tee "$outdir/digitizer-$ts.hidrec"
 
 if command -v evtest >/dev/null 2>&1; then
   ev=""
-  ev="$(grep -B4 'Name=.*ELAN9008.*Stylus' /proc/bus/input/devices \
-        | grep -o 'event[0-9]*' | head -1 || true)"
+  # Handlers comes several lines AFTER Name in a /proc block, so match the
+  # block and read forward, not backward.
+  ev="$(awk '
+      /^N: Name=.*ELAN9008.*Stylus/ { want = 1 }
+      want && /^H: Handlers=/ {
+        for (i = 1; i <= NF; i++)
+          if ($i ~ /^event[0-9]+$/) { print $i; exit }
+      }
+    ' /proc/bus/input/devices)"
   if [ -n "$ev" ]; then
     echo "Also recording the kernel's decoded events from /dev/input/$ev for 60 s"
     echo "(repeat a hover + draw + buttons sequence now)."

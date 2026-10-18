@@ -8,6 +8,10 @@
 # This script does NOT pair anything itself — bluetoothctl stays in your
 # hands. It only records and dumps.
 #
+# Note (2026-10-17): an UNPAIRED pen never advertises, so scan on will not
+# show it (findings/006 §7.5). This script is only useful for pairing a pen
+# whose address you already have; for the normal flow use 04-tap-to-pair.sh.
+#
 # Usage (from the repo root):
 #   tools/capture/linux/03-manual-pair.sh <BT-ADDRESS> [outdir]
 # Output: <outdir>/pair-<ts>/ (btmon log, bluez dumps, rdesc if readable)
@@ -32,7 +36,7 @@ echo
 echo "Now, in ANOTHER terminal, pair the pen (you type these):"
 echo "  bluetoothctl"
 echo "  power on"
-echo "  scan on          # wait until the pen shows up, note its name"
+echo "  scan on          # optional: the pen will NOT show up until it is paired once"
 echo "  pair $addr"
 echo "  trust $addr"
 echo "  quit"
