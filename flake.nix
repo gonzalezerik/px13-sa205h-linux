@@ -24,6 +24,12 @@
           cargoLock.lockFile = ./Cargo.lock;
           nativeBuildInputs = [ pkgs.pkg-config ];
           buildInputs = [ pkgs.gtk4 pkgs.libadwaita ];
+          postInstall = ''
+            install -Dm644 crates/opp-settings/data/org.openpenprotocol.Settings.desktop \
+              $out/share/applications/org.openpenprotocol.Settings.desktop
+            install -Dm644 crates/opp-settings/data/icons/hicolor/scalable/apps/org.openpenprotocol.Settings.svg \
+              $out/share/icons/hicolor/scalable/apps/org.openpenprotocol.Settings.svg
+          '';
           meta = {
             description = "Linux support for MPP 2.6 haptic pens";
             license = pkgs.lib.licenses.agpl3Plus;

@@ -27,6 +27,14 @@ reason). Pressing it again runs `StopPairing()`.
 When `oppd` goes away the window stays open and says so: it is easier
 to restart a daemon than to recover a dead settings window.
 
+## Menu and desktop entry
+
+The corner menu holds **About Open Pen** — version, licence, upstream
+and issue links, the version read from the package metadata so it
+cannot drift. The package installs the desktop entry
+(`org.openpenprotocol.Settings`) and its icon, so the window shows up
+in normal launcher searches.
+
 ## Threading and write coalescing
 
 The widget thread owns only widgets. One background thread owns the

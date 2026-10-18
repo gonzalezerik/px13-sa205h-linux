@@ -153,6 +153,9 @@ pub fn build(app: &adw::Application, system: bool) -> adw::ApplicationWindow {
     let toolbar = adw::ToolbarView::new();
     let header = adw::HeaderBar::new();
     header.set_title_widget(Some(&adw::WindowTitle::new("Open Pen", "")));
+    // The primary menu sits in the right corner it always sits in; the
+    // search button takes the spot next to the title.
+    header.pack_end(&menu_button());
     let search_button = pair_button();
     header.pack_end(&search_button);
     toolbar.add_top_bar(&header);
@@ -174,6 +177,19 @@ pub fn build(app: &adw::Application, system: bool) -> adw::ApplicationWindow {
     toasts.set_child(Some(&stack));
     toolbar.set_content(Some(&toasts));
     window.set_content(Some(&toolbar));
+
+    // Per-window action group, so a second application window would get
+    // its own About dialog transient to itself. The dialog is built once
+    // and re-presented; libadwaita dialogs are reusable.
+    let actions = gtk::gio::SimpleActionGroup::new();
+    let about_action = gtk::gio::SimpleAction::new("about", None);
+    let about = about_dialog();
+    let about_parent = window.clone();
+    about_action.connect_activate(move |_, _| {
+        about.present(Some(&about_parent));
+    });
+    actions.add_action(&about_action);
+    window.insert_action_group("win", Some(&actions));
 
     let pairing = Rc::new(RefCell::new(Pairing {
         active: false,
@@ -311,6 +327,35 @@ fn pair_button() -> gtk::Button {
     gtk::Button::builder()
         .label("Search for pens")
         .css_classes(["suggested-action"])
+        .build()
+}
+
+/// The primary menu. About is the only entry today; the corner goes in
+/// the place users look, so later entries move nothing.
+fn menu_button() -> gtk::MenuButton {
+    let menu = gtk::gio::Menu::new();
+    menu.append(Some("About Open Pen"), Some("win.about"));
+    let button = gtk::MenuButton::builder()
+        .icon_name("open-menu-symbolic")
+        .tooltip_text("Main menu")
+        .menu_model(&menu)
+        .build();
+    button.update_property(&[gtk::accessible::Property::Label("Main menu")]);
+    button
+}
+
+/// What it is, who maintains it, which licence, where to file issues —
+/// the version comes from the package metadata so it cannot drift.
+fn about_dialog() -> adw::AboutDialog {
+    adw::AboutDialog::builder()
+        .application_name("Open Pen")
+        .application_icon("org.openpenprotocol.Settings")
+        .developer_name("The Open Pen Protocol maintainers")
+        .version(env!("CARGO_PKG_VERSION"))
+        .comments("Pen settings for the Open Pen Protocol daemon.")
+        .website("https://github.com/gonzalezerik/open-pen-protocol")
+        .issue_url("https://github.com/gonzalezerik/open-pen-protocol/issues")
+        .license_type(gtk::License::Agpl30)
         .build()
 }
 
