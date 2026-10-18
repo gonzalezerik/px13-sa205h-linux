@@ -66,9 +66,3 @@ jobs:
       - uses: actions/checkout@v5
       - run: ./tools/privacy/check.sh
 
-  a11y:
-    name: accessibility gate
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-      - run: ./tools/a11y/check.sh

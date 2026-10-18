@@ -144,17 +144,7 @@ specific architecture's layout; read device data with explicit endianness.
 - [Semantic Versioning](https://semver.org/); tags `vX.Y.Z` on `main`; notable
   changes go in `CHANGELOG.md` under `Unreleased`.
 
-## 9. Accessibility
-
-**Open Pen Protocol targets WCAG 2.2 Level AA for every user-facing surface, enforced in
-CI.** The standard and checklist are in [docs/a11y.md](docs/a11y.md).
-Non-negotiables: no information by colour alone; full keyboard operation with
-visible focus; accessible names on every control; 4.5:1 contrast in both themes;
-layouts survive 200 % text scale; respect reduce-motion; 24×24 px minimum targets;
-every haptic cue has a visual or audible equivalent. A UI change merges only with
-its automated AT-SPI2 check present and green.
-
-## 10. Upstream contributions
+## 9. Upstream contributions
 
 Parts of this work belong upstream: the Linux kernel (HID haptics for pens, HID-BPF quirks),
 BlueZ, libinput and Wayland protocols. Anything sent upstream follows **that project's own rules

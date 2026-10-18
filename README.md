@@ -12,12 +12,6 @@ already works on Linux through `hid-multitouch`. This project adds everything el
 > First function landed: `oppd watch-pair` bonds the pen the moment its tip touches the
 > screen (`docs/protocol/seamless-pairing.md`). Haptics, battery and buttons are in progress.
 
-## Accessibility
-
-Open Pen Protocol targets **WCAG 2.2 Level AA** for every user-facing surface (settings app,
-CLI output, notifications), and every haptic cue has a visual or audible equivalent.
-See [docs/a11y.md](docs/a11y.md).
-
 ## Platforms
 
 | | glibc | musl |
@@ -36,10 +30,10 @@ See [docs/decisions.md](docs/decisions.md).
 | `crates/oppd` | the daemon (hidraw + BlueZ, D-Bus API) |
 | `crates/oppctl` | command-line client |
 | `container/` | podman Containerfiles: `Containerfile.glibc` (Debian), `Containerfile.musl` (Alpine) |
-| `docs/` | protocol write-ups, parity matrix, decisions, accessibility standard |
+| `docs/` | protocol write-ups, parity matrix, decisions |
 | `findings/` | dated research notes |
 | `fixtures/` | recorded, scrubbed hardware data used by tests |
-| `tools/` | privacy and a11y gates, artifact fetcher |
+| `tools/` | privacy gate, artifact fetcher |
 
 ## Development
 

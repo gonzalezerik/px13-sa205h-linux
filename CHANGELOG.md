@@ -10,5 +10,5 @@ All notable changes to this project are documented here. The format follows
 
 - Project scaffold: Rust workspace (`opp-core`, `oppd`, `oppctl`), Nix flake,
   podman Containerfiles for glibc (Debian) and musl (Alpine), CI on x86_64 and
-  aarch64, privacy and accessibility gates.
+  aarch64, privacy gate.
 - PX13 digitizer fixtures and identification findings.
