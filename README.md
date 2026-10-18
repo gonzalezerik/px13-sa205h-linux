@@ -1,12 +1,23 @@
 # Open Pen Protocol (OPP)
 
-Open Pen Protocol is Linux support for **MPP 2.6 haptic pens** (Microsoft Pen Protocol),
-aiming at parity with what Windows does for them: tap-to-pair over Bluetooth, haptic
-feedback, pen battery, Bluetooth buttons and pen settings.
+Open Pen Protocol is open Linux support for the active-pen features the kernel doesn't
+cover: tap-to-pair over Bluetooth, haptic feedback, pen battery, Bluetooth buttons and
+settings stored in the pen.
 
-First target: the **ASUS Pen 3.0 (SA205H)** on the **ASUS ProArt PX13 (HN7306)** with the
-ELAN `04F3:4631` digitizer. Inking (position, pressure, tilt, eraser, barrel button)
-already works on Linux through `hid-multitouch`. This project adds everything else.
+OPP doesn't replace the protocol a pen speaks to the screen (MPP, USI, AES). That lives in
+the pen's and the digitizer's firmware, and inking (position, pressure, tilt, eraser,
+barrel button) already works on Linux through `hid-multitouch` and `wacom`. OPP is the
+layer above it: one D-Bus interface that describes any pen by its capabilities, with a
+backend per pen protocol underneath. Desktops and apps talk to that interface and never
+need to know which protocol the pen speaks.
+
+| Pen protocol | Status |
+|---|---|
+| **MPP 2.6** (Microsoft Pen Protocol, haptic pens) | in progress, tested on the ASUS Pen 3.0 (SA205H) with the ASUS ProArt PX13 (HN7306) and its ELAN `04F3:4631` digitizer |
+| MPP 2.0 / 1.x | planned |
+| USI 1.0 / 2.0 | planned |
+
+A protocol is listed as supported only once it has been tested on real hardware.
 
 > **Status: research.** The protocol work (`docs/protocol/`, `findings/`) comes first.
 > First function landed: `oppd watch-pair` bonds the pen the moment its tip touches the
