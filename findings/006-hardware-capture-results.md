@@ -160,10 +160,12 @@ The gesture engine (`Ninput`) mouse-promotion flags line up with the steps: `0x2
 promotion (taps), `0x20002` right-button promotion (press-and-hold and barrel paths). Only 6 haptic
 ticks fired against 12 right promotions. Press-and-hold **without** the barrel also right-clicks
 (`HoldMode=1`).
-*(Update from findings/007, frame-stepped 2026-10-18: the hold→right-click takes ≈1.9 s and **no
-circle renders** despite `GestureVisualization=31`; the tick hypothesis is dead — the ticks land at
-the end of hover strokes, not at hold completion, and never at a right promotion. The clock anchor
-held: video t0 = 19:31:14.)* **[superseded by findings/007]**
+*(Update from findings/007, frame-stepped 2026-10-18: the hold→right-click takes ≤1.9 s; the tick
+hypothesis is dead — the ticks land at the end of hover strokes, not at hold completion, and never
+at a right promotion. The clock anchor held: video t0 = 19:31:14. The recording shows no circle,
+but that is capture blindness, not absence — a display-camera video (007 §5a) proves the
+press-and-hold ring does render, sweeping ≈0.6–1.0 s and closing just before the menu.)*
+**[superseded by findings/007]**
 
 ## 7. Consequences for the build (feeds docs/parity.md)
 

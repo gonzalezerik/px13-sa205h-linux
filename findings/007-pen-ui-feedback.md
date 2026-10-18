@@ -2,6 +2,11 @@
 
 Date: 2026-10-18 · Confidence: **[V-VID]** = measured on the session-07 screen recording frame by
 frame; frame numbers are decode order from frame 0, `t = n/30`. Wall-clock = 19:31:14 + t (§2).
+**[V-DISP]** = measured on a phone video of the physical display (§5a; 28.28 s, decoded
+2160×3840 @ ≈29.95 fps; times are video PTS and approximate).
+Revision same day: the first version of §5 read the screen recording and concluded **no
+press-and-hold ring is drawn** — that was wrong; the screen recorder does not capture the ring
+(§5a). Everything else here stands.
 Everything here refines or replaces the "analysis pending" state of findings/006 §6.
 
 ## 1. Method — and a trap
@@ -14,6 +19,12 @@ frame 0 and selecting by frame number; contact sheets must be built the same way
 
 Motion was measured with consecutive-frame difference (`tblend=all_mode=difference`) + `signalstats`
 over a crop; presence of the pen cursor with a per-frame luma minimum over an 80×80 box.
+
+There is a trap one level *above* the file, too: the screen recording captures the composited
+desktop, not everything the panel shows. The press-and-hold ring (§5a) renders only to the
+display — no frame of this recording shows it, and no on-machine screenshot ever will. Pixel
+claims about pen visuals from a screen capture need display-camera confirmation before they become
+conclusions.
 
 ## 2. Clock anchor
 
@@ -59,21 +70,51 @@ falls between later steps and is unmapped. Treat "Windows buzzes the pen on hove
 the Linux check is one line: hover the pen, lift out of range, watch `oppd`/hcidump for a write to
 the haptics handle. **[V-VID correlation / HYP semantics]**
 
-## 5. Press-and-hold without the barrel (step 3): 1.9 s, and no circle
+## 5. Press-and-hold without the barrel (step 3): ≤1.9 s to the right-click
 
 - The pen cursor (desktop star) **appears at frame 2244** (t 74.800; 80×80 box at (515, 1197),
   per-frame YMIN 104 → 67 — pure wallpaper through frame 2243) and sits at ≈ (555, 1237), drifting
   ≤ 2 px, through frame 2300. Whether the glyph appears on proximity-in or on contact is not
   separable here, so tip-down ≤ 2244 and the hold was **at most 1.90 s** before the right
   promotion at 2301 (57 frames). **[V-VID]**
-- **No press-and-hold ring is drawn.** A 400×400 tile of frames 2225–2310 around the cursor and
-  native-resolution zooms of 2285/2290/2296/2300 show wallpaper, then the star, then the menu —
-  no arc, no fill — despite `GestureVisualization=31` and `HoldTime=2300` being set (006 §4).
-  The maintainer's test notes asked whether the circle starts earlier than 2300 ms suggests; on
-  this recording (Windows 11 25H2, this pen) **no circle renders at all** and the right-click
-  arrives ~1.9 s after the pen comes down. **[V-VID]**
-- Consequence for parity: the thing to replicate is the *timing*, not a progress ring; if OPP ever
-  draws its own hold indicator it is adding, not matching.
+- No arc appears around the cursor anywhere in this recording (400×400 tile of frames 2225–2310,
+  native zooms of 2285/2290/2296/2300: wallpaper, then the star, then the menu). That is a fact
+  about the capture, not about the display — see §5a. The first revision of this section read the
+  missing pixels as a missing ring; corrected.
+
+## 5a. The press-and-hold ring exists — filmed off the physical display
+
+Pressing and holding the pen tip on the Windows 11 desktop builds a white ring around the contact
+point, frame by frame, until it closes; the context menu then opens and the ring fades. On-machine
+screen recordings and screenshots never show any of it (§5, §1) — only a camera pointed at the
+panel does. Evidence: a 28.28 s phone video of the display covering six press-and-hold cycles
+(handheld, decoded 2160×3840 @ ≈29.95 fps), frame-stepped with per-frame crops at each contact
+point. The `GestureVisualization=31` visualisation (006 §6) is presumably what this is. **[V-DISP]**
+
+| cycle | first ring mark | ring closed | menu opens | mark→menu |
+|---|---|---|---|---|
+| 1 | 4.11 s (dot above tip) | ≤ 4.80 s | 5.21 s | ≈ 1.10 s |
+| 2 | dot at contact ≈ 7.7 s, arc sweeping by 8.3 s | ≈ 9.3 s | ≈ 9.4 s | ≈ 1.7 s |
+| 3 | dot at contact ≈ 11.1 s, arc sweeping by 12.0 s | ≈ 13.0 s | ≈ 13.1 s | ≈ 2.0 s |
+
+Times are video PTS in seconds: ±1 frame (≈33 ms) plus a hand-held, moving camera — treat them as
+approximate, good to roughly ±0.1–0.2 s. Cycle 4's ring start is hidden by a hand/keyboard
+close-up; cycle 6 sweeps and closes (≈27.4–28.0 s) but the video ends before its menu.
+
+The animation: a small dot sits at/above the tip for a beat (up to ≈0.7 s in cycles 2–3 — the
+sweep does not start the instant of contact), then a white arc sweeps around the contact point over
+≈0.6–1.0 s of visible growth, the closed circle holds a few hundred ms, the menu slides in, and
+the ring fades within ≈0.3 s of the menu.
+
+Consequences:
+
+- The right-click arrives ≈1.1–2.0 s after the first mark across the measurable cycles —
+  consistent with the ≤1.90 s bound from the screen recording (§5) and under `HoldTime=2300` in
+  every case: whatever gates pen press-and-hold, 2300 ms is visibly not it.
+- For parity: a Linux stack that draws no press-and-hold ring is showing a **gap**, not parity —
+  Windows does render one. The hover glyph (§3) and this ring are display-layer visuals; whether
+  OPP draws the ring (e.g. a layer-shell overlay following the cursor) or a compositor/toolkit
+  should is an open question for the maintainer, recorded here, not decided.
 
 ## 6. The context menu
 
@@ -88,9 +129,9 @@ at 2301. **[V-VID]**
 ## 7. Still open on this video
 
 - Map the later popup windows (frames 3270–3299, 3480–3539, 3585–3607, 3660–3734, 3780–3824,
-  4440–4469, 5430–5504, 6195–6254) to steps 4–8, and check the step-7 barrel-hold window for a
-  ring — if any step shows the visualisation, that bounds what `GestureVisualization` actually
-  does.
+  4440–4469, 5430–5504, 6195–6254) to steps 4–8. A ring check on this recording is now moot —
+  screen capture cannot record the ring at all (§5a); a barrel-hold ring, if one exists, needs
+  another display-camera video.
 - The unexplained one-frame luma spikes at 1021 (t 34.0) and 2248 over the canvas crop.
 - Exact tip-down/tip-up and barrel flags remain the win32k.etl's job (`POINTER_FLAG_SECONDBUTTON`
   for the barrel); the video gives contact-ordered bounds only.
