@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Command-line client for `oppd`. `status` is one look at the pens,
-//! `watch` is a JSON Lines stream of their changes, both over the D-Bus
+//! `watch` follows their changes (readable lines, or JSON Lines with
+//! `--json`), both over the D-Bus
 //! interface of docs/dbus.md. The output contract is docs/oppctl.md and
 //! contrib/ has the Waybar example; the empty-when-idle rule itself
 //! lives in `json` and is tested there.
 
 mod client;
 mod json;
+mod text;
 
 use std::process::ExitCode;
 
@@ -18,17 +20,18 @@ commands:
       --json        one compact JSON object on stdout (docs/oppctl.md)
       --all         include pens that are paired but not connected
       --system      talk to oppd on the system bus (oppd serve --system)
-  watch             stream events as JSON Lines: a snapshot, then
-                    pen.added, pen.removed, pen.changed and pairing;
-                    exits with an error when oppd goes away
+  watch             follow the pens live: what is connected, battery,
+                    a pen coming near and being paired; exits with an
+                    error when oppd goes away
+      --json        JSON Lines instead: a snapshot, then pen.added,
+                    pen.removed, pen.changed and pairing (docs/oppctl.md)
       --all         keep link-down pens in the stream
       --system      talk to oppd on the system bus
   -h, --help        print this help
   -V, --version     print the version
 
-An empty result is an empty stdout in every format, so a Waybar custom
-module hides itself while no pen is connected. `watch` only ever emits
-JSON; --json is accepted there for symmetry with status.
+`status` prints nothing at all while no pen is connected, in every
+format, so a Waybar custom module hides itself.
 ";
 
 fn main() -> ExitCode {
@@ -41,7 +44,7 @@ fn main() -> ExitCode {
                 if command == "status" {
                     client::status(options.all, options.system, options.json).await
                 } else {
-                    client::watch(options.all, options.system).await
+                    client::watch(options.all, options.system, options.json).await
                 }
             }),
         },

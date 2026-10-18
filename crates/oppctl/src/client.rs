@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The two commands: `status` takes one look at the pens, `watch`
 //! follows them. The bus work itself lives in `opp-client`; this
-//! module wires it to the output contract in `json`.
+//! module wires it to the output contract in `json` and to the
+//! readable lines in `text`.
+
+use std::time::Instant;
 
 use opp_client::{Client, WatchEvent};
 
 use crate::json::{self, Event};
+use crate::text;
 
 /// One look at the pens, filtered and sorted, printed and done.
 pub async fn status(all: bool, system: bool, as_json: bool) -> Result<(), String> {
@@ -24,14 +28,23 @@ pub async fn status(all: bool, system: bool, as_json: bool) -> Result<(), String
     Ok(())
 }
 
-/// Stream events as JSON Lines until the daemon goes away. The match
-/// rule is registered before the snapshot is read — `Client::follow`
-/// keeps that order so a signal can be duplicated but never lost.
-pub async fn watch(all: bool, system: bool) -> Result<(), String> {
+/// Follow the pens until the daemon goes away: readable lines by
+/// default, JSON Lines with `--json`. The match rule is registered
+/// before the snapshot is read — `Client::follow` keeps that order so a
+/// signal can be duplicated but never lost.
+pub async fn watch(all: bool, system: bool, as_json: bool) -> Result<(), String> {
     let client = Client::connect(system).await?;
+    let start = Instant::now();
     client
         .follow(all, |event| {
-            print!("{}", json::event_line(&view(&event)));
+            if as_json {
+                print!("{}", json::event_line(&view(&event)));
+            } else {
+                let prefix = text::prefix(start.elapsed().as_secs_f64());
+                for line in text::event_lines(&event) {
+                    println!("{prefix}{line}");
+                }
+            }
         })
         .await
 }

@@ -8,6 +8,7 @@ directly. No per-bar plugins (docs/decisions.md).
 ```console
 $ oppctl status           # one look, plain text
 $ oppctl status --json    # one look, one JSON object on one line
+$ oppctl watch            # follow live, readable lines (not a contract)
 $ oppctl watch --json     # JSON Lines until oppd goes away
 ```
 
@@ -56,6 +57,23 @@ Haptics UIs draw from `waveforms`, never from a hardcoded effect list.
 One line per pen — `SA205H  battery 87 %` — with `battery unknown`
 before the first battery reading, and a `  link down` suffix under
 `--all`.
+
+## `watch`
+
+Without `--json`, `watch` prints one readable line per event, prefixed
+with the seconds since it started — for a terminal left open next to the
+pen:
+
+```console
+$ oppctl watch
+[   0.0 s] watching oppd: no pen connected yet
+[  12.4 s] pen nearby (XX:XX:XX:XX:XX:XX), pairing…
+[  13.0 s] paired: XX:XX:XX:XX:XX:XX
+[  13.1 s] pen added: SA205H  battery unknown  connected
+[  14.6 s] SA205H  battery 87 %  connected
+```
+
+That wording may change; scripts read `--json`.
 
 ## `watch --json`
 

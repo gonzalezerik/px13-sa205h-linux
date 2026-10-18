@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- `oppd serve` reaches BlueZ and the pairing helper on the system bus even when it
+  exports on the session bus; before, the per-user daemon looked for BlueZ on the
+  session bus and exited at startup.
+- The touch-to-pair listener runs from the moment `oppd` starts, and `oppd` starts
+  with the graphical session (a systemd user preset), so a new pen pairs as soon as
+  it comes near the screen. A failed pairing is retried on a later announcement
+  instead of never; new bonds and failures raise a desktop notification.
+- The pairing helper's system activation file is now named
+  `org.openpenprotocol.PairHelper1.service`; D-Bus ignored it under its old `.conf`
+  name, so the helper never started.
+- `oppctl watch` prints readable lines by default; `--json` keeps the JSON Lines
+  contract.
 - Migrated the daemon's BlueZ access from zbus 5 to zbus 6.0: the blocking API
   is gone upstream, so the D-Bus calls now run the async API under
   `zbus::block_on`, and `Value`/`OwnedValue` became `Variant`/`OwnedVariant`.
