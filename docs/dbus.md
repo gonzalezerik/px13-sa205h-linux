@@ -100,7 +100,7 @@ ignored.
 | Key | Type | Meaning |
 |---|---|---|
 | `pairing` | `s` | `"seamless-touch"` — tip-to-screen pairing via the digitizer announcement; `"manual"` — pair like any Bluetooth device |
-| `haptics` | `a{sv}` | present when the pen plays haptics. `waveforms`: `a(qsub)` — `(ordinal, name, duration_ms, continuous)` for each playable waveform. Continuous waveforms are felt only while the tip is in contact (the pen auto-triggers them from the tip switch, findings/006 §4). |
+| `haptics` | `a{sv}` | present when the pen plays haptics. `waveforms`: `a(qsqb)` — `(ordinal, name, duration_ms, continuous)` for each playable waveform. Continuous waveforms are felt only while the tip is in contact (the pen auto-triggers them from the tip switch, findings/006 §4). |
 | `buttons` | `a{sv}` | `barrel`: `b` — the barrel switch, reported in-band by the digitizer, not over Bluetooth; `shortcut`: `b` — the top-end button over Bluetooth; `shortcut-gestures`: `as` — the gestures the pen itself distinguishes, from `"single"`, `"double"`, `"long"` (findings/006 §5: the pen classifies them, the host must not re-time) |
 | `battery` | `s` | `"ble-battery-service"` — the standard Bluetooth battery service, also visible in UPower without OPP; `"none"` |
 | `settings` | `a{sv}` | settings stored **in the pen** (as opposed to host policy). None today on supported pens, so the key is absent; keys will be added when a pen with stored settings is supported. |

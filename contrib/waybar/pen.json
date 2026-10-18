@@ -1,0 +1,8 @@
+{
+  "custom/pen": {
+    "exec": "~/.config/waybar/scripts/pen.sh",
+    "return-type": "json",
+    "interval": 10,
+    "exec-on-event": false
+  }
+}
