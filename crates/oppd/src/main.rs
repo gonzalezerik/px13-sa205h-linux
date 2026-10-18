@@ -9,13 +9,16 @@
 //! the write ban on the vendor output reports is respected
 //! (seamless-pairing.md §4). `watch-pen` follows battery and link state
 //! through BlueZ; `watch-buttons` dumps the pen's raw evdev events so the
-//! top-button codes can be identified. Haptics are still to come.
+//! top-button codes can be identified. `haptic` plays one effect with
+//! the single output report 0x41 and writes nothing unless `--send` is
+//! given.
 
 use std::collections::HashMap;
 use std::process::ExitCode;
 use std::time::Instant;
 
 mod buttons;
+mod haptics;
 mod presence;
 
 use hidapi::{DeviceInfo, HidApi};
@@ -45,6 +48,16 @@ commands:
   watch-buttons       dump raw evdev events from the pen's input node,
                       to identify what the top-button report becomes
       --list          list pen-named evdev nodes and exit
+  haptic EFFECT       play one haptic effect on the paired pen (single
+                      output report 0x41; without --send only the exact
+                      bytes are printed)
+      --list          print the effect table and exit
+      --intensity P   percent of full strength, 0..100 (default 100)
+      --repeat N      plays (default 1)
+      --cutoff-ms N   ceiling on total playback; 10 ms units, max 2550
+      --retrigger-ms N  milliseconds between repeats (default 0)
+      --path PATH     pen hidraw node (default: the only pen-named HID)
+      --send          write the report to the pen
   -h, --help          print this help
   -V, --version       print the version
 ";
@@ -70,6 +83,7 @@ fn main() -> ExitCode {
             (Err(message), _) | (_, Err(message)) => Err(message),
         },
         Some("watch-buttons") => buttons::watch_buttons(args.iter().any(|arg| arg == "--list")),
+        Some("haptic") => haptics::haptic(&args),
         Some("-h") | Some("--help") => {
             print!("{USAGE}");
             Ok(())

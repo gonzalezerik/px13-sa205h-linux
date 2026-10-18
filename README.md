@@ -104,6 +104,9 @@ oppd watch-pair --dry-run # prints pairing notifications as a pen approaches, ch
 oppd watch-pair           # bonds the announced pen through BlueZ (needs the system bus)
 oppd watch-pen            # live battery + link changes of the paired pen (via BlueZ)
 oppd watch-buttons --list # lists the pen's evdev nodes; without --list dumps its raw events
+oppd haptic --list        # the pen's effect table (ordinals from its capability report)
+oppd haptic click --send  # one click buzz on the paired pen; without --send only the exact
+                          # output-report bytes are printed
 ```
 
 Once the daemon is functional it needs read/write access to the digitizer's
