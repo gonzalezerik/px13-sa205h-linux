@@ -21,7 +21,7 @@ referred to by role only.
 | 03 pairing | first full tap-to-pair HCI trace | host initiates the connection ~0.3 s after tip touch; **LE legacy SMP**, full key distribution both directions |
 | 04 haptics | settings toggles + direct-send tests | persistence located (registry, §4); capability feature reports read; every waveform felt |
 | 05 buttons | barrel vs top button, isolated | barrel is digitizer-in-band only (zero BLE); top button is the BLE keyboard collection |
-| 07 pen UI | screen recording + gesture-engine timeline | Wisp timing parameters exported; frame-by-frame analysis still queued (§6) |
+| 07 pen UI | screen recording + gesture-engine timeline | Wisp timing parameters exported; frame-by-frame analysis in findings/007 |
 | 08 pairing full | repeat of 03 with a fixed HID reader | **the decisive 0x6E trace** (§2) |
 | Linux step 1 | `hid-recorder` + `evtest` + `btmon` | digitizer capture good (§5); the pen never advertises over BLE on its own |
 
@@ -158,11 +158,12 @@ Wisp parameters on the test machine: `HoldMode=1`, `HoldTime=2300`, `TapTime=100
 `FlickTolerance=50`; cursors: `ContactVisualization=1`, `GestureVisualization=31`, `NWPen=aero_pen.cur`.
 The gesture engine (`Ninput`) mouse-promotion flags line up with the steps: `0x20001` left-button
 promotion (taps), `0x20002` right-button promotion (press-and-hold and barrel paths). Only 6 haptic
-ticks fired against 12 right promotions → the tick is tied to the hold threshold completing, not to
-every right-click. Press-and-hold **without** the barrel also circles and right-clicks
-(`HoldMode=1`). The perceived circle start is much earlier than `HoldTime=2300` suggests — the
-screen recording + Ninput timeline will settle that with frame stepping (queued; video t0 ≈ the
-first left promotion). **[captured; VERIFIED-HW for the promotion-flag timing pattern, rest pending]**
+ticks fired against 12 right promotions. Press-and-hold **without** the barrel also right-clicks
+(`HoldMode=1`).
+*(Update from findings/007, frame-stepped 2026-10-18: the hold→right-click takes ≈1.9 s and **no
+circle renders** despite `GestureVisualization=31`; the tick hypothesis is dead — the ticks land at
+the end of hover strokes, not at hold completion, and never at a right promotion. The clock anchor
+held: video t0 = 19:31:14.)* **[superseded by findings/007]**
 
 ## 7. Consequences for the build (feeds docs/parity.md)
 
