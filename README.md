@@ -9,7 +9,8 @@ ELAN `04F3:4631` digitizer. Inking (position, pressure, tilt, eraser, barrel but
 already works on Linux through `hid-multitouch`. This project adds everything else.
 
 > **Status: research.** The protocol work (`docs/protocol/`, `findings/`) comes first.
-> `oppd` and `oppctl` build and run but don't do anything useful yet.
+> First function landed: `oppd watch-pair` bonds the pen the moment its tip touches the
+> screen (`docs/protocol/seamless-pairing.md`). Haptics, battery and buttons are in progress.
 
 ## Accessibility
 
@@ -97,7 +98,10 @@ the privacy pre-commit hook (§4).
 
 ```sh
 oppctl --version
-oppd                      # currently prints the supported digitizers and exits
+oppd                      # prints the supported digitizers
+oppd pairing-state        # reads the digitizer's seamless-pairing flag (read-only)
+oppd watch-pair --dry-run # prints pairing notifications as a pen approaches, changes nothing
+oppd watch-pair           # bonds the announced pen through BlueZ (needs the system bus)
 ```
 
 Once the daemon is functional it needs read/write access to the digitizer's

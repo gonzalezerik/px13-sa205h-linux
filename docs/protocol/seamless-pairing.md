@@ -138,3 +138,12 @@ OOB-vs-Just-Works half of the distinction is still open; the Linux pairing run a
 
 When each lands, upgrade the matching HYPOTHESIS lines above to VERIFIED-HW or mark them wrong —
 do not delete them, annotate.
+
+## 6. Implementation (landed 2026-10-17)
+
+`oppd watch-pair` runs this model end to end: it parses report 110 (`0x6E`) off the digitizer's
+hidraw node (`opp_core::seamless`), then drives BlueZ — `org.bluez.Adapter1.ConnectDevice` with
+`AddressType "le"` for the announced random-static address, `org.bluez.Device1.Pair`, then
+`Trust`. `oppd pairing-state` reads feature 112 (`0x70`) and nothing else; §4's write ban holds —
+the daemon writes no output report and no unclassified feature. `--dry-run` prints the
+notifications and stops there. Open item 4 closes on the first live bonding run.
