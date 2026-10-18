@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- Migrated the daemon's BlueZ access from zbus 5 to zbus 6.0: the blocking API
+  is gone upstream, so the D-Bus calls now run the async API under
+  `zbus::block_on`, and `Value`/`OwnedValue` became `Variant`/`OwnedVariant`.
+  This also clears the RustSec advisories on the `zbus_names` and `zvariant`
+  crates, which zbus 6 folds into itself. MSRV is now Rust 1.89.
 - Renamed the project to Open Pen Protocol (OPP): crates `opp-core`, `oppd`, `oppctl`.
 
 - Project scaffold: Rust workspace (`opp-core`, `oppd`, `oppctl`), Nix flake,

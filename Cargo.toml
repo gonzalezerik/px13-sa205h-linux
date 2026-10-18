@@ -6,7 +6,7 @@ members = ["crates/opp-core", "crates/oppd", "crates/oppctl"]
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/gonzalezerik/open-pen-protocol"
 description = "Linux support for MPP 2.6 haptic pens"

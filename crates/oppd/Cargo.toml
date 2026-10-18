@@ -9,9 +9,10 @@ repository.workspace = true
 description = "Daemon for MPP 2.6 pens: pairing, haptics, battery, buttons"
 
 [dependencies]
+futures-util = "0.3"
 hidapi = { version = "2.6.7", default-features = false, features = ["linux-native-basic-udev"] }
 opp-core = { path = "../opp-core", version = "0.0.1" }
-zbus = "5.13.2"
+zbus = "6.0.0"
 
 [lints]
 workspace = true

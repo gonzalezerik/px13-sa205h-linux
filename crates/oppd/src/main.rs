@@ -23,8 +23,7 @@ mod presence;
 
 use hidapi::{DeviceInfo, HidApi};
 use opp_core::seamless;
-use zbus::blocking::{Connection, Proxy};
-use zbus::zvariant::Value;
+use zbus::{Connection, Proxy, Variant};
 
 /// Input buffers must fit the largest input report the device can send.
 const READ_BUF_BYTES: usize = 8192;
@@ -174,7 +173,14 @@ fn find_digitizer(api: &HidApi) -> Result<&DeviceInfo, String> {
 }
 
 /// Open the digitizer and bond every pen it announces. Runs until stopped.
+/// One `block_on` owns the loop, so the D-Bus connection keeps its executor
+/// alive across notifications.
 fn watch_pair(dry_run: bool, adapter: &str) -> Result<(), String> {
+    let adapter = adapter.to_string();
+    zbus::block_on(watch_pair_async(dry_run, adapter))
+}
+
+async fn watch_pair_async(dry_run: bool, adapter: String) -> Result<(), String> {
     let api = HidApi::new().map_err(|error| format!("cannot open the HID subsystem: {error}"))?;
     let info = find_digitizer(&api)?;
     let device = api
@@ -183,13 +189,15 @@ fn watch_pair(dry_run: bool, adapter: &str) -> Result<(), String> {
     let connection = if dry_run {
         None
     } else {
-        Some(Connection::system().map_err(|error| {
+        Some(Connection::system().await.map_err(|error| {
             format!("cannot reach the system bus (is bluetoothd running?): {error}")
         })?)
     };
     println!("watching for pairing notifications — tap the pen tip to the screen (Ctrl-C to stop)");
     let start = Instant::now();
     let mut frame = vec![0u8; READ_BUF_BYTES];
+    // `device.read` parks the executor while we wait on the digitizer;
+    // nothing else needs to run between notifications.
     loop {
         let len = device
             .read(&mut frame)
@@ -208,7 +216,7 @@ fn watch_pair(dry_run: bool, adapter: &str) -> Result<(), String> {
                 "  dry run: would ConnectDevice({address}, AddressType=le), Pair, Trust on {adapter}"
             );
         } else if let Some(connection) = &connection {
-            match bond(connection, adapter, &address) {
+            match bond(connection, &adapter, &address).await {
                 Ok(summary) => println!("  {summary}"),
                 Err(message) => eprintln!("  pairing failed: {message}"),
             }
@@ -219,7 +227,7 @@ fn watch_pair(dry_run: bool, adapter: &str) -> Result<(), String> {
 /// Bond one announced pen through BlueZ: direct connect to the announced
 /// random-static address, pair (LE Just Works — the digitizer already
 /// authenticated the pen by announcing it), then trust for reconnects.
-fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<String, String> {
+async fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<String, String> {
     let adapter_path = format!("/org/bluez/{adapter}");
     let pen_path = format!("{adapter_path}/dev_{}", address.replace(':', "_"));
     let adapter_proxy = Proxy::new(
@@ -228,6 +236,7 @@ fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<String,
         adapter_path.as_str(),
         "org.bluez.Adapter1",
     )
+    .await
     .map_err(|error| format!("adapter {adapter}: {error}"))?;
     let pen_proxy = Proxy::new(
         connection,
@@ -235,32 +244,40 @@ fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<String,
         pen_path.as_str(),
         "org.bluez.Device1",
     )
+    .await
     .map_err(|error| format!("pen object {pen_path}: {error}"))?;
-    if pen_proxy.get_property::<bool>("Paired").unwrap_or(false) {
+    if pen_proxy
+        .get_property::<bool>("Paired")
+        .await
+        .unwrap_or(false)
+    {
         return Ok("already paired — BlueZ reconnects it on use".to_string());
     }
     let mut options = HashMap::new();
-    options.insert("AddressType", Value::new("le"));
-    let connected: zbus::Result<()> = adapter_proxy.call("ConnectDevice", &(address, options));
-    if let Err(error) = connected {
-        if !is_bluez_error(
+    options.insert("AddressType", Variant::from("le"));
+    let connected: zbus::Result<()> = adapter_proxy
+        .call("ConnectDevice", &(address, options))
+        .await;
+    if let Err(error) = connected
+        && !is_bluez_error(
             &error,
             &[
                 "org.bluez.Error.AlreadyConnected",
                 "org.bluez.Error.InProgress",
             ],
-        ) {
-            return Err(format!("ConnectDevice({address}): {error}"));
-        }
+        )
+    {
+        return Err(format!("ConnectDevice({address}): {error}"));
     }
-    let paired: zbus::Result<()> = pen_proxy.call("Pair", &());
-    if let Err(error) = paired {
-        if !is_bluez_error(&error, &["org.bluez.Error.AlreadyExists"]) {
-            return Err(format!("Pair: {error}"));
-        }
+    let paired: zbus::Result<()> = pen_proxy.call("Pair", &()).await;
+    if let Err(error) = paired
+        && !is_bluez_error(&error, &["org.bluez.Error.AlreadyExists"])
+    {
+        return Err(format!("Pair: {error}"));
     }
     pen_proxy
         .set_property("Trust", true)
+        .await
         .map_err(|error| format!("Trust: {error}"))?;
     Ok(format!("paired and trusted {address}"))
 }

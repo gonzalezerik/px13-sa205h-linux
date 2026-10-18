@@ -134,7 +134,7 @@ pub fn watch_buttons(list_only: bool) -> Result<(), String> {
         }
         pending.extend_from_slice(&buffer[..read]);
         let complete = pending.len() - pending.len() % RECORD_BYTES;
-        for chunk in pending[..complete].chunks_exact(RECORD_BYTES) {
+        for chunk in pending[..complete].as_chunks::<RECORD_BYTES>().0 {
             if let Some(event) = parse_record(chunk) {
                 println!("{}", event.format());
             }

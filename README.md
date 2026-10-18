@@ -79,7 +79,7 @@ installed: `ARCH=arm64 container/build.sh`. CI builds them natively instead.
 
 ### With plain cargo
 
-Rust 1.85 or newer:
+Rust 1.89 or newer:
 
 ```sh
 cargo build --release --workspace     # → target/release/{oppd,oppctl}
