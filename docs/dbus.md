@@ -210,7 +210,7 @@ $ busctl --user call io.github.gonzalezerik.Px13Pen.Daemon1 \
 ao 1 "/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05"
 $ busctl --user call io.github.gonzalezerik.Px13Pen.Daemon1 \
     /io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05 \
-    io.github.gonzalezerik.Px13Pen.Haptics1 PlayEffect s y y q q "click" 255 1 0 0
+    io.github.gonzalezerik.Px13Pen.Haptics1 PlayEffect syyqq "click" 255 1 0 0
 b true
 ```
 
