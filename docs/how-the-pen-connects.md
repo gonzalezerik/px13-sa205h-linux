@@ -13,11 +13,12 @@ PEN
  │     ► ELAN9008 digitizer controller ► HID over I2C ► host
  │     hover · ink · pressure · tilt · barrel · eraser · serial · battery strength
  │                    │
- │                    └─ report 0x6E on the "ELAN Seamless Pairing" collection:
- │                       the pen's BLE address, handed up on tip touch [ours]
+ │                    └─ the 0xFFF4 "seamless pairing" collection [public: Microsoft guide]
+ │                       0x56 host address in · 0x6E pen address out (hover or touch)
+ │                       0x6F pairing key in
  │
- └─ link 2 (Bluetooth LE): the pen NEVER advertises [ours]
-       ► host connects to the address from report 0x6E
+ └─ link 2 (Bluetooth LE): the pen advertises only after the host's key [ours]
+       ► host pairs the advertiser
        HID over GATT: top button (0x43) · haptics (0x41 out) ·
        battery notifications · identity/capability features [public transport]
 ```
@@ -49,7 +50,7 @@ One field is easy to double-count: **battery strength appears on both links** �
 byte in report 7 and as a Bluetooth notification (§ below). Whether they always agree
 is an open question.
 
-## Link 2: Bluetooth — only the extras, and the pen never advertises
+## Link 2: Bluetooth — only the extras, and the pen does not advertise on its own
 
 Once connected, HID over GATT **[public: Bluetooth HID over GATT profile]** carries:
 
@@ -67,15 +68,20 @@ The barrel button is *not* one of the extras: it is on the screen link, in repor
 visible only while the pen is in range; a gesture battery across three presses showed
 zero Bluetooth traffic **[ours: findings/006 §5]**.
 
-Critically, **the pen never advertises**. During a 43-second Linux scan it saw 210
-advertising reports from various devices — none from the pen, touching or hovering.
-An ordinary `bluetoothctl scan` can therefore never find this pen **[ours:
-findings/006 §7.5]**.
+Critically, **the pen does not advertise on its own**. During a 43-second Linux scan it
+saw 210 advertising reports from various devices — none from the pen, touching or
+hovering **[ours: findings/006 §7.5]**. It advertises in two situations only: right after
+a host hands it a pairing key through the digitizer (below), and in its button pairing
+mode (hold the top button until the LED blinks white) **[ours: findings/008]**.
 
 ## Touch-to-pair, as measured
 
-The trick is that the *digitizer* delivers the Bluetooth address to the host, so the
-host can connect directly. The pen does not even have to touch: the digitizer announces
+Touch-to-pair is Microsoft's published *Seamless Pairing for Windows Pens* protocol
+**[public: learn.microsoft.com, "Seamless Pairing for Windows Pens Implementation
+Guide"]**. The host registers its own Bluetooth address with the digitizer (feature
+`0x56`), the digitizer announces a pen in range (input `0x6E`) and says whether the pen
+already has a pairing with that host, the host sends a pairing key (output `0x6F`), and
+the pen answers over Bluetooth. The pen does not even have to touch: the digitizer announces
 it as soon as it is in range, hovering included, and repeats the announcement every few
 seconds while the pen has no Bluetooth link. In a Linux recording with no pairing software
 running, 7 of 9 announcements came while the pen only hovered, before it first touched the
@@ -91,46 +97,50 @@ a touch (all timestamps from a single local clock, findings/006 §2):
 | +0.37 | LE connection complete; **LE legacy SMP** pairing begins |
 | +0.61 | encryption on: bonded. **Tap to bonded ≈ 0.6 s** |
 
-No advertising report from the pen appears anywhere before the connection — the only
-way the host could know the address is the digitizer report **[ours]**. Key
+No advertising report from the pen appears in the Windows log before the connection:
+the host's controller was already initiating a connection when the pen advertised,
+and an initiating controller does not report advertisements to the host **[ours]**. Key
 distribution is full in both directions; the pen's random static address is its
 identity, so it reconnects to the same address forever. Report `0x6E` is preceded
 each time by vendor report 34, the controller's pen-presence telemetry carrying the
 transducer serial **[ours: findings/006 §3]**.
 
-The same report fires spontaneously on bare Linux, with no vendor driver involved —
-flag byte `0x01`, versus `0x03` on Windows. Whether that second bit is an arm/ack for
-the Windows consumer or just controller state is unknown; the handoff itself needs
-nothing from Windows **[ours]**.
+The same report fires on bare Linux with no vendor driver, flag byte `0x01`: random
+address, **no pairing with this host** — because no host had registered an address in
+`0x56`. After a Linux host registers its adapter's address, the flag reads `0x03` for a
+pen bonded to that address, and `0x01` for a host identity the pen has never seen
+**[ours: findings/008 §3, §8]**.
 
-What remains open: Windows plausibly writes an **output report `0x6F`** (address +
-flag + a 16-byte, OOB-key-sized value) back down after pairing. Host→device HID
-writes are invisible to a user-mode reader, so it has not been observed either way.
-The first Linux pairing — plain Bluetooth Just Works, no `0x6F` — is the decisive
-test: if it bonds, `0x6F` is optional **[ours: findings/006 §2 "Still open"]**.
+## Touch-to-pair on Linux
 
-## Why pairing needs one extra step on Linux
+It works with stock BlueZ and a stock kernel, about 0.7 s from touch to bonded, the same
+as Windows **[ours: findings/008]**:
 
-Bluetooth on Linux is discovery-centric: `bluetoothd` only pairs devices it has
-found. A device that never advertises has no device object, so connecting to a
-known address is exactly what `org.bluez.Adapter1.ConnectDevice` exists for — and
-that method is still behind BlueZ's `Experimental` flag **[public: BlueZ
-adapter-api docs]**.
+1. at start, write `0x56` (the adapter's LE address, little-endian, type) and `0x70`;
+2. keep an LE scan running while a pen is in range — the pen's advertisement follows the
+   key within milliseconds and lasts only tens of milliseconds;
+3. on `0x6E`, write `0x6F` with the announced address and a key;
+4. pair whichever device then advertises as the pen (name "ASUS Pen", appearance
+   `0x03C7`) — usually a different address from the announced one, because the pen
+   keeps a separate identity per host;
+5. pair with passkey entry and **passkey 0**.
 
-This project therefore treats the `0x6E` report as the discovery channel
-(`oppd watch-pair`, then connect/bond), with the pairing itself going through
-`ConnectDevice` when BlueZ runs with experimental features on, and through a small
-bus-activated helper speaking the kernel mgmt API when it does not. See
-[docs/protocol/seamless-pairing.md](protocol/seamless-pairing.md) and
-[docs/packaging.md](packaging.md). Whether the helper-initiated bond completes the
-GATT side (HoG discovery, battery, buttons) end-to-end is marked
-**[HYPOTHESIS]** there until a live run confirms it.
+The last step is where Linux differs. Windows pairs *out-of-band* with the 128-bit key it
+sent through the digitizer, so the key never crosses the radio. The Linux kernel has no
+LE legacy out-of-band support (the pen is legacy-only), so Linux uses passkey entry; the
+pen has nothing to type with and enters 0. The pen accepts that as authenticated pairing
+and the user sees the same thing as on Windows, but the pairing moment is not protected
+against a passive eavesdropper. The kernel feature that would close the gap is noted in
+[docs/future/kernel-le-legacy-oob.md](future/kernel-le-legacy-oob.md); details in
+[docs/protocol/seamless-pairing.md](protocol/seamless-pairing.md) §3.
 
 ## Sources
 
-Public: USB HID Usage Tables (Digitizer Page `0x0D`); Bluetooth HID over GATT
-profile; BlueZ `adapter-api` (ConnectDevice, experimental flag). Ours (this repo):
-findings/006 (pairing clock chain, `0x6E`/report-34 semantics, buttons, battery,
+Public: Microsoft's *Seamless Pairing for Windows Pens Implementation Guide*; USB HID
+Usage Tables (Digitizer Page `0x0D`); Bluetooth HID over GATT profile; Bluetooth Core
+Specification, Security Manager (legacy pairing methods); BlueZ `doc/mgmt-protocol.rst`
+(Add Remote Out Of Band Data). Ours (this repo):
+findings/008 (touch-to-pair on Linux), findings/006 (pairing clock chain, `0x6E`/report-34 semantics, buttons, battery,
 haptics on the wire), findings/005/007, `docs/protocol/digitizer-tlc.md` (report
 descriptor layout), `docs/protocol/seamless-pairing.md`, `docs/protocol/haptics.md`.
 Session identifiers ("session 08 run 2") refer to the instrumented sessions

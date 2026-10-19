@@ -1,39 +1,33 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Seamless pairing: the ELAN digitizer's `0xFFF4` vendor collection.
 //!
-//! The digitizer announces a nearby pen by sending input report `0x6E`:
-//! six Bluetooth address bytes little-endian, then one flag byte. Observed
-//! on hardware (VERIFIED-HW, findings/006 §2–3): the report fires
-//! spontaneously about 0.1–0.15 s after the pen tip touches the screen,
-//! with nothing armed first; a host that connects to the announced address
-//! as a BLE random-static identity bonds in about half a second, and the
-//! pen never advertises on its own.
+//! This collection is Microsoft's *Seamless Pairing for Windows Pens*
+//! protocol (docs/protocol/seamless-pairing.md). The digitizer announces a
+//! pen in range with input report `0x6E`: six Bluetooth address bytes
+//! little-endian, then a flag byte (bit 0 random address, bit 1 Host Pairing
+//! Exists for the host registered in feature `0x56`). The host answers with
+//! a pairing key in output `0x6F`, after which the pen advertises and can be
+//! paired (findings/008).
 //!
-//! Nothing in this module talks to a device. The output report that would
-//! relay key material back through the digitizer is named here for
-//! completeness and stays unwritten — see the write ban in
-//! `docs/protocol/seamless-pairing.md` §4.
+//! Nothing in this module talks to a device; it names the reports and
+//! parses the announcement.
 
-/// Input report id carrying a pairing candidate (`0x6E`).
+/// Input report id of the Device Bluetooth Report (`0x6E`).
 pub const REPORT_NOTIFICATION: u8 = 0x6E;
 
-/// Feature report holding the "seamless pairing enabled" bit (`0x70`).
-/// Read on hardware (returns `01`); never written.
+/// Feature report id of the Device Capability Report (`0x70`), bit 0 =
+/// seamless pair capable. The host sets it and reads it back.
 pub const FEATURE_ENABLED: u8 = 0x70;
 
-/// Output report that would relay a key to the pen (`0x6F`). Whether it is
-/// needed at all is an open question (seamless-pairing.md §5 item 4), and
-/// it is write-banned until answered.
+/// Output report id of the Pairing Key Report (`0x6F`): announced address,
+/// its type, and a 16-byte temporary key.
 pub const OUTPUT_KEY_RELAY: u8 = 0x6F;
 
-/// Flag bit present in every notification seen so far, with a Windows
-/// consumer active and without one. Assumed "address valid" — the vendor
-/// meaning is unconfirmed (HYPOTHESIS).
+/// Flag bit: the announced address is a random (not public) address.
 pub const FLAG_ADDRESS: u8 = 0x01;
 
-/// Flag bit seen only while the Windows Bluetooth stack was consuming
-/// notifications: `0x03` there versus `0x01` on an unconsumed Linux capture.
-/// Unknown semantics (HYPOTHESIS).
+/// Flag bit: Host Pairing Exists, the pen already has a pairing with the
+/// host address registered in feature `0x56`.
 pub const FLAG_CONSUMER: u8 = 0x02;
 
 /// One parsed `0x6E` frame.

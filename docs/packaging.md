@@ -65,6 +65,13 @@ machine.
 
 ## Pairing and privilege
 
+> The pairing method described in this section is being replaced. Touch-to-pair on this pen
+> works without any privileged step: register the host with the digitizer, send the key,
+> pair the pen's advertisement through BlueZ with passkey entry
+> (docs/protocol/seamless-pairing.md). Once the kernel supports LE legacy out-of-band keys,
+> the helper's remaining job is adding the key as remote out-of-band data
+> (docs/future/kernel-le-legacy-oob.md).
+
 Pairing normally goes through BlueZ `Adapter1.ConnectDevice`. That method is
 `[experimental]` in current BlueZ releases, and enabling it would mean asking users to edit
 `main.conf` — not acceptable. Instead the daemon detects the missing method and calls

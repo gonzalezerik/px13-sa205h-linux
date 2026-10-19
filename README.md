@@ -20,8 +20,11 @@ need to know which protocol the pen speaks.
 A protocol is listed as supported only once it has been tested on real hardware.
 
 > **Status: research.** The protocol work (`docs/protocol/`, `findings/`) comes first.
-> First function landed: `oppd` bonds the pen the moment it comes near the
-> screen (`docs/protocol/seamless-pairing.md`). Haptics, battery and buttons are in progress.
+> Touch-to-pair is verified on the hardware: Microsoft's seamless-pairing protocol, run by
+> a Linux host with stock BlueZ, pairs the pen in about 0.7 s
+> ([findings/008](findings/008-linux-seamless-pairing.md)). The daemon's pairing path is
+> being moved onto that flow; until then `tools/capture/linux/06-seamless-pairing.py` runs it.
+> Haptics, battery and buttons are in progress.
 
 ## Platforms
 
@@ -111,8 +114,9 @@ oppctl --version
 oppd                      # prints the supported digitizers
 oppd pairing-state        # reads the digitizer's seamless-pairing flag (read-only)
 oppd watch-pair --dry-run # prints pairing notifications as a pen approaches, changes nothing
-oppd watch-pair           # bonds the announced pen: through BlueZ when the daemon exports
-                          # ConnectDevice, otherwise via the polkit-gated kernel pairing helper
+python3 tools/capture/linux/06-seamless-pairing.py
+                          # touch-to-pair, verified flow (the daemon's own path is being
+                          # replaced by it; see docs/protocol/seamless-pairing.md)
 oppctl watch              # follow the daemon live: pens, battery, pairing progress
 oppd watch-pen            # live battery + link changes of the paired pen (via BlueZ)
 oppd watch-buttons --list # lists the pen's evdev nodes; without --list dumps its raw events

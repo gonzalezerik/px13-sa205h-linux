@@ -59,12 +59,13 @@ removed when BlueZ forgets it — announcing a not-yet-paired pen does **not** c
 | `StartPairing()` | — | `b` | turn the touch-to-pair listener back on (it starts on its own) and retry every pen; `b` is whether the state changed. Idempotent. |
 | `StopPairing()` | — | `b` | stop it; `b` is whether the state changed. Idempotent. |
 
-Pairing is the flow of docs/protocol/seamless-pairing.md: the digitizer announces a pen
-that came into range (hovering or touching), and `oppd` asks BlueZ to connect to the
-announced address (`AddressType=random`), pair (LE Just Works — bringing the pen to the
-screen is the authentication) and trust it. Where BlueZ does not export the experimental
-`ConnectDevice`, the pairing helper bonds through the kernel instead (docs/packaging.md).
-When a supported digitizer is present the listener runs from the moment `oppd` starts, so
+Pairing is the flow of docs/protocol/seamless-pairing.md: the host registers its address with
+the digitizer, the digitizer announces a pen that came into range (hovering or touching), the
+host sends a pairing key, and the pen advertises; the host pairs that advertiser with passkey
+entry (passkey 0, §3 there) and trusts it. **The daemon does not implement this flow yet**: it
+still connects to the announced address with Just Works (`ConnectDevice`, or the pairing helper
+where BlueZ lacks it), which this pen does not answer. The interface below stays as it is when
+the flow is replaced. When a supported digitizer is present the listener runs from the moment `oppd` starts, so
 bringing a new pen near the screen is all it takes. `StopPairing()` turns it off;
 `StartPairing()` turns it back on and retries every pen at once.
 
