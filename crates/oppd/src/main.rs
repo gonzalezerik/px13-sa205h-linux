@@ -171,16 +171,13 @@ fn device_arg(args: &[String]) -> Result<Option<String>, String> {
 
 /// The single supported digitizer present on this machine, by `hidraw`.
 fn find_digitizer(api: &HidApi) -> Result<&DeviceInfo, String> {
-    let found: Vec<&DeviceInfo> = api
-        .device_list()
-        .filter(|info| {
-            let id = opp_core::HidId {
-                vendor: info.vendor_id(),
-                product: info.product_id(),
-            };
-            opp_core::supported_digitizer(id).is_some()
-        })
-        .collect();
+    let found = one_per_node(api.device_list().filter(|info| {
+        let id = opp_core::HidId {
+            vendor: info.vendor_id(),
+            product: info.product_id(),
+        };
+        opp_core::supported_digitizer(id).is_some()
+    }));
     match found.first() {
         None => Err(
             "no supported digitizer found — is this a PX13, and can the current user read the hidraw node (the uaccess rule shipped with the package grants it)?".to_string(),
@@ -191,6 +188,18 @@ fn find_digitizer(api: &HidApi) -> Result<&DeviceInfo, String> {
             found.len()
         )),
     }
+}
+
+/// hidapi lists a device once per top-level collection, all with the same
+/// hidraw path (the ELAN digitizer alone has more than a dozen), so count
+/// nodes, not entries: keep the first entry of each path.
+pub(crate) fn one_per_node<'a>(
+    entries: impl Iterator<Item = &'a DeviceInfo>,
+) -> Vec<&'a DeviceInfo> {
+    let mut seen = std::collections::HashSet::new();
+    entries
+        .filter(|info| seen.insert(info.path().to_owned()))
+        .collect()
 }
 
 /// Open the digitizer and bond every pen it announces. Runs until stopped.

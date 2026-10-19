@@ -132,17 +132,14 @@ pub(crate) fn send_to_pen(path: Option<&str>, report: &[u8]) -> Result<(), Strin
             (api.open_path(&c_path), explicit.to_string())
         }
         None => {
-            let found: Vec<&hidapi::DeviceInfo> = api
-                .device_list()
-                .filter(|info| {
-                    let id = opp_core::HidId {
-                        vendor: info.vendor_id(),
-                        product: info.product_id(),
-                    };
-                    let name = info.product_string().unwrap_or("").to_lowercase();
-                    opp_core::supported_digitizer(id).is_none() && name.contains("pen")
-                })
-                .collect();
+            let found = crate::one_per_node(api.device_list().filter(|info| {
+                let id = opp_core::HidId {
+                    vendor: info.vendor_id(),
+                    product: info.product_id(),
+                };
+                let name = info.product_string().unwrap_or("").to_lowercase();
+                opp_core::supported_digitizer(id).is_none() && name.contains("pen")
+            }));
             let chosen = match found.as_slice() {
                 [] => {
                     return Err(
