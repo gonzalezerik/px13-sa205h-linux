@@ -51,6 +51,7 @@ echo "Wake the pen (tip to screen) whenever it has gone quiet."
 watch_until_enter() {
   local file="$1"
   shift
+  read -r
   "$@" >"$file" 2>&1 &
   local pid=$!
   read -r
