@@ -71,12 +71,12 @@ pub fn event_kind_name(kind: u16) -> Option<&'static str> {
     }
 }
 
-/// Pen-looking evdev nodes: entries under `<sysroot>/input` whose device
-/// name mentions the pen (uhid names the node after the GATT device).
-/// Returns (event node name, device name) sorted by node name.
+/// Pen-looking evdev nodes: entries under `<sysroot>/class/input` whose
+/// device name mentions the pen (uhid names the node after the GATT
+/// device). Returns (event node name, device name) sorted by node name.
 pub fn find_pen_nodes(sysroot: &Path) -> Vec<(String, String)> {
     let mut found = Vec::new();
-    let Ok(entries) = std::fs::read_dir(sysroot.join("input")) else {
+    let Ok(entries) = std::fs::read_dir(sysroot.join("class").join("input")) else {
         return found;
     };
     for entry in entries.flatten() {
@@ -206,7 +206,7 @@ mod tests {
             COUNTER.fetch_add(1, Ordering::SeqCst)
         ));
         let mk = |node: &str, name: &str| {
-            let dir = root.join("input").join(node).join("device");
+            let dir = root.join("class").join("input").join(node).join("device");
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("name"), format!("{name}\n")).unwrap();
         };
