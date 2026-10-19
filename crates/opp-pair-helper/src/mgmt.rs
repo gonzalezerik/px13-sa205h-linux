@@ -32,6 +32,8 @@ const HCI_DEV_NONE: u16 = 0xffff;
 
 // Values from BlueZ lib/bluetooth/mgmt.h and doc/mgmt-api.txt.
 const MGMT_OP_PAIR_DEVICE: u16 = 0x0019;
+/// `MGMT_OP_CANCEL_PAIR_DEVICE`, parameters = `mgmt_addr_info` (7 bytes).
+const MGMT_OP_CANCEL_PAIR_DEVICE: u16 = 0x001a;
 /// `struct mgmt_cp_pair_device`: `mgmt_addr_info` (6-byte address + type)
 /// plus the IO capability.
 const PAIR_DEVICE_PARAMS: u16 = 8;
@@ -112,6 +114,17 @@ fn pair_device_frame(index: u16, address: [u8; 6]) -> [u8; 14] {
     frame
 }
 
+/// The `MGMT_OP_CANCEL_PAIR_DEVICE` frame for the same device.
+fn cancel_pair_frame(index: u16, address: [u8; 6]) -> [u8; 13] {
+    let mut frame = [0u8; 6 + 7];
+    frame[0..2].copy_from_slice(&MGMT_OP_CANCEL_PAIR_DEVICE.to_le_bytes());
+    frame[2..4].copy_from_slice(&index.to_le_bytes());
+    frame[4..6].copy_from_slice(&7u16.to_le_bytes());
+    frame[6..12].copy_from_slice(&address);
+    frame[12] = MGMT_ADDR_LE_RANDOM;
+    frame
+}
+
 /// One open control socket, closed on drop.
 struct ControlSocket(libc::c_int);
 
@@ -182,25 +195,29 @@ fn open_control_socket() -> Result<ControlSocket, io::Error> {
 /// Returns once the kernel reports the pairing complete.
 pub(crate) fn pair_device(index: u16, address: [u8; 6]) -> Result<(), String> {
     let socket = open_control_socket().map_err(|error| format!("mgmt control socket: {error}"))?;
-    let frame = pair_device_frame(index, address);
-    // The socket is bound to the control channel; the controller is in
-    // the frame header, so a plain send is the whole request.
+    send_frame(socket.0, &pair_device_frame(index, address))
+        .map_err(|error| format!("MGMT_OP_PAIR_DEVICE: {error}"))?;
+    let result = await_pairing(socket.0, index, &address);
+    if result.is_err() {
+        // The kernel keeps trying to connect after we stop waiting, and
+        // answers every later Pair Device for this pen with Busy until the
+        // attempt is cancelled. Best effort: the result already says why.
+        let _ = send_frame(socket.0, &cancel_pair_frame(index, address));
+    }
+    result
+}
+
+/// Send one frame on the bound control socket; the controller index is
+/// in the frame header, so no destination address is needed.
+fn send_frame(fd: libc::c_int, frame: &[u8]) -> Result<(), io::Error> {
     let sent = unsafe {
         // SAFETY: `frame` is a live buffer of the given length.
-        libc::send(
-            socket.0,
-            frame.as_ptr().cast::<libc::c_void>(),
-            frame.len(),
-            0,
-        )
+        libc::send(fd, frame.as_ptr().cast::<libc::c_void>(), frame.len(), 0)
     };
     if sent < 0 {
-        return Err(format!(
-            "MGMT_OP_PAIR_DEVICE: {}",
-            io::Error::last_os_error()
-        ));
+        return Err(io::Error::last_os_error());
     }
-    await_pairing(socket.0, index, &address)
+    Ok(())
 }
 
 /// Read management events until the pairing result for our device
@@ -351,6 +368,21 @@ mod tests {
                 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0xce, // address, wire order
                 0x02, // BDADDR_LE_RANDOM
                 0x03, // NoInputNoOutput
+            ]
+        );
+    }
+
+    #[test]
+    fn the_cancel_frame_is_the_documented_bytes() {
+        let frame = cancel_pair_frame(0, [0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0xce]);
+        assert_eq!(
+            frame,
+            [
+                0x1a, 0x00, // MGMT_OP_CANCEL_PAIR_DEVICE
+                0x00, 0x00, // controller index
+                0x07, 0x00, // parameter length
+                0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0xce, // address, wire order
+                0x02, // BDADDR_LE_RANDOM
             ]
         );
     }

@@ -57,6 +57,9 @@ const DRAIN_LIMIT: usize = 512;
 /// unconnected, so a failed pairing is retried on the next announcement
 /// after this pause instead of never, and a working one is not hammered.
 const RETRY_AFTER: Duration = Duration::from_secs(5);
+/// Failures within this long of the previous one belong to the same
+/// streak and stay out of the notifications; a later one is news again.
+const FAILURE_STREAK: Duration = Duration::from_secs(60);
 
 /// Battery sentinel while BlueZ has not reported a level yet (docs/dbus.md §5).
 const BATTERY_UNKNOWN: i32 = -1;
@@ -345,7 +348,9 @@ impl State {
                 {
                     continue;
                 }
-                let failed_before = attempts.get(&address).is_some_and(|attempt| attempt.failed);
+                let failed_before = attempts
+                    .get(&address)
+                    .is_some_and(|attempt| attempt.failed && attempt.at.elapsed() < FAILURE_STREAK);
                 attempts.insert(
                     address.clone(),
                     Attempt {
