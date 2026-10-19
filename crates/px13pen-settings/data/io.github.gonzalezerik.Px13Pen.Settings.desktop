@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PX13 Pen
+GenericName=Pen settings
+Comment=Settings for pens handled by the PX13 SA205H Linux daemon
+Exec=px13pen-settings
+Icon=io.github.gonzalezerik.Px13Pen.Settings
+Terminal=false
+Categories=GTK;Settings;HardwareSettings;
+StartupNotify=true

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # musl build: Alpine 3.24. Same stages as Containerfile.glibc; CI builds both on
 # x86_64 and aarch64 (native runners, no emulation).
-#   podman build -f container/Containerfile.musl -t open-pen-protocol:musl .
+#   podman build -f container/Containerfile.musl -t px13-sa205h-linux:musl .
 #   podman build -f container/Containerfile.musl --target test .
 ARG RUST_IMAGE=docker.io/library/rust:1.99.1-alpine3.24
 ARG RUNTIME_IMAGE=docker.io/library/alpine:3.24
@@ -18,15 +18,15 @@ COPY crates ./crates
 COPY tools ./tools
 COPY contrib ./contrib
 COPY data ./data
-RUN cargo build --release --locked --workspace --exclude opp-settings
+RUN cargo build --release --locked --workspace --exclude px13pen-settings
 
 FROM build AS test
 RUN rustup component add clippy rustfmt \
  && cargo fmt --all --check \
  && cargo run --locked -p xtask -- generate-udev-rules --check \
  && cargo clippy --locked --workspace --all-targets -- -D warnings \
- && cargo test --locked --workspace --exclude opp-settings
+ && cargo test --locked --workspace --exclude px13pen-settings
 
 FROM ${RUNTIME_IMAGE} AS runtime
-COPY --from=build /src/target/release/oppd /src/target/release/oppctl /usr/local/bin/
-ENTRYPOINT ["/usr/local/bin/oppd"]
+COPY --from=build /src/target/release/px13pend /src/target/release/px13penctl /usr/local/bin/
+ENTRYPOINT ["/usr/local/bin/px13pend"]

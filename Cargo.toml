@@ -2,12 +2,12 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/opp-core",
-    "crates/opp-client",
-    "crates/oppd",
-    "crates/oppctl",
-    "crates/opp-settings",
-    "crates/opp-pair-helper",
+    "crates/px13pen-core",
+    "crates/px13pen-client",
+    "crates/px13pend",
+    "crates/px13penctl",
+    "crates/px13pen-settings",
+    "crates/px13pen-pair-helper",
     "crates/xtask",
 ]
 
@@ -16,7 +16,7 @@ version = "0.0.1"
 edition = "2024"
 rust-version = "1.89"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/gonzalezerik/open-pen-protocol"
+repository = "https://github.com/gonzalezerik/px13-sa205h-linux"
 description = "Linux support for MPP 2.6 haptic pens"
 
 [workspace.lints.rust]

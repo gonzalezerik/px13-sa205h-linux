@@ -93,8 +93,8 @@ def adapter_address():
 
 
 def daemon(method):
-    subprocess.run(["busctl", "--user", "call", "org.openpenprotocol.Daemon1",
-                    "/org/openpenprotocol/Daemon", "org.openpenprotocol.Daemon1", method],
+    subprocess.run(["busctl", "--user", "call", "io.github.gonzalezerik.Px13Pen.Daemon1",
+                    "/io/github/gonzalezerik/Px13Pen/Daemon", "io.github.gonzalezerik.Px13Pen.Daemon1", method],
                    capture_output=True)
 
 

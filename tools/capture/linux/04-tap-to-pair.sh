@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # One live touch-to-pair run against the installed daemon: the session's
-# own `oppd` (started with the graphical session) bonds the pen while btmon
+# own `px13pend` (started with the graphical session) bonds the pen while btmon
 # records the HCI side. Before and after, the script captures the
 # digitizer's seamless-pairing feature flag, and afterwards dumps
 # everything BlueZ learned about the pen: device info, GATT tree (includes
@@ -14,9 +14,9 @@
 # digitizer key-relay output (0x6F) is optional.
 #
 # Usage (from the repo root, with the package installed — on NixOS the
-# module, services.open-pen-protocol.enable — and logged in again since):
+# module, services.px13-sa205h-linux.enable — and logged in again since):
 #   tools/capture/linux/04-tap-to-pair.sh [outdir]
-# Keep `oppctl watch` open in a second terminal to follow it live; a new
+# Keep `px13penctl watch` open in a second terminal to follow it live; a new
 # bond also raises a desktop notification. Needs: the installed package
 # (uaccess rule, user service, pairing helper) and sudo for btmon only.
 #
@@ -29,29 +29,29 @@ dir="$outdir/tap-to-pair-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$dir"
 
 daemon() {
-  busctl --user call org.openpenprotocol.Daemon1 /org/openpenprotocol/Daemon \
-    org.openpenprotocol.Daemon1 "$@"
+  busctl --user call io.github.gonzalezerik.Px13Pen.Daemon1 /io/github/gonzalezerik/Px13Pen/Daemon \
+    io.github.gonzalezerik.Px13Pen.Daemon1 "$@"
 }
 
-if ! systemctl --user is-active --quiet oppd.service; then
-  echo "oppd is not running — starting it (it normally starts with the session)"
-  systemctl --user start oppd.service
+if ! systemctl --user is-active --quiet px13pend.service; then
+  echo "px13pend is not running — starting it (it normally starts with the session)"
+  systemctl --user start px13pend.service
 fi
-systemctl --user status oppd.service --no-pager > "$dir/oppd-status.txt" 2>&1 || true
-journalctl --user -u oppd.service -f -o short-precise > "$dir/oppd.log" 2>&1 &
+systemctl --user status px13pend.service --no-pager > "$dir/px13pend-status.txt" 2>&1 || true
+journalctl --user -u px13pend.service -f -o short-precise > "$dir/px13pend.log" 2>&1 &
 journal_pid=$!
-oppctl watch --json > "$dir/watch.jsonl" 2>&1 &
+px13penctl watch --json > "$dir/watch.jsonl" 2>&1 &
 watch_pid=$!
 trap 'kill "$journal_pid" "$watch_pid" 2>/dev/null || true' EXIT
 
 cp /proc/bus/input/devices "$dir/input-devices-before.txt"
-oppd pairing-state > "$dir/pairing-state-before.txt" 2>&1 || true
+px13pend pairing-state > "$dir/pairing-state-before.txt" 2>&1 || true
 
 echo
 echo "Dry round first — the daemon's listener is paused and nothing touches"
 echo "Bluetooth; this only checks that the digitizer announces the pen."
 daemon StopPairing > /dev/null
-oppd watch-pair --dry-run > "$dir/watch-pair-dry.log" 2>&1 &
+px13pend watch-pair --dry-run > "$dir/watch-pair-dry.log" 2>&1 &
 dry_pid=$!
 echo "Hover the pen over the screen (or touch it) once, then press Enter."
 read -r
@@ -70,7 +70,7 @@ trap 'sudo kill "$btmon_pid" 2>/dev/null || true; kill "$journal_pid" "$watch_pi
 daemon StartPairing > /dev/null
 echo
 echo "The daemon is listening again. Bring the pen near the screen and keep it"
-echo "there a few seconds: oppctl watch shows it being found and paired, and a"
+echo "there a few seconds: px13penctl watch shows it being found and paired, and a"
 echo "notification says the pen is paired. Then press Enter here to stop."
 read -r
 
@@ -80,7 +80,7 @@ kill "$journal_pid" "$watch_pid" 2>/dev/null || true
 trap - EXIT
 sleep 1
 
-oppd pairing-state > "$dir/pairing-state-after.txt" 2>&1 || true
+px13pend pairing-state > "$dir/pairing-state-after.txt" 2>&1 || true
 bluetoothctl show > "$dir/bluetoothctl-show.txt" 2>&1 || true
 bluetoothctl devices > "$dir/bluetoothctl-devices.txt" 2>&1 || true
 
@@ -98,6 +98,6 @@ diff -u "$dir/input-devices-before.txt" "$dir/input-devices-after.txt" \
   > "$dir/input-devices.diff" || true
 
 echo "Done. Dump in $dir — it is capture evidence, keep it private."
-echo "Success looks like: oppd.log shows 'paired and trusted', a 'paired'"
+echo "Success looks like: px13pend.log shows 'paired and trusted', a 'paired'"
 echo "notification appeared, info-*.txt shows Paired: yes Trusted: yes, and"
 echo "gatt-*.txt shows Battery1."

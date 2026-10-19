@@ -1,8 +1,0 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
-# Session-bus activation for the per-user daemon: opp-settings, oppctl
-# or the tray starting a D-Bus call brings oppd up without any unit
-# being enabled. @PREFIX@ is substituted at install time.
-
-[D-BUS Service]
-Name=org.openpenprotocol.Daemon1
-Exec=@PREFIX@/bin/oppd serve

@@ -14,7 +14,7 @@
   libadwaita,
 }:
 rustPlatform.buildRustPackage {
-  pname = "open-pen-protocol";
+  pname = "px13-sa205h-linux";
   version = (builtins.fromTOML (builtins.readFile ../Cargo.toml)).workspace.package.version;
   src = lib.fileset.toSource {
     root = ./..;
@@ -36,48 +36,48 @@ rustPlatform.buildRustPackage {
 
     # The helper is privileged and not a command; libexec it.
     mkdir -p $out/libexec
-    mv $out/bin/opp-pair-helper $out/libexec/opp-pair-helper
+    mv $out/bin/px13pen-pair-helper $out/libexec/px13pen-pair-helper
 
-    install -Dm644 contrib/udev/70-open-pen-protocol.rules \
-      $out/lib/udev/rules.d/70-open-pen-protocol.rules
+    install -Dm644 contrib/udev/70-px13-sa205h-linux.rules \
+      $out/lib/udev/rules.d/70-px13-sa205h-linux.rules
 
-    install -Dm644 data/dbus/system-services/org.openpenprotocol.PairHelper1.service \
-      $out/share/dbus-1/system-services/org.openpenprotocol.PairHelper1.service
-    substituteInPlace $out/share/dbus-1/system-services/org.openpenprotocol.PairHelper1.service \
+    install -Dm644 data/dbus/system-services/io.github.gonzalezerik.Px13Pen.PairHelper1.service \
+      $out/share/dbus-1/system-services/io.github.gonzalezerik.Px13Pen.PairHelper1.service
+    substituteInPlace $out/share/dbus-1/system-services/io.github.gonzalezerik.Px13Pen.PairHelper1.service \
       --replace-fail "@PREFIX@" "$out"
 
-    install -Dm644 data/dbus/system.d/org.openpenprotocol.PairHelper1.conf \
-      $out/share/dbus-1/system.d/org.openpenprotocol.PairHelper1.conf
+    install -Dm644 data/dbus/system.d/io.github.gonzalezerik.Px13Pen.PairHelper1.conf \
+      $out/share/dbus-1/system.d/io.github.gonzalezerik.Px13Pen.PairHelper1.conf
 
-    install -Dm644 data/dbus/session-services/org.openpenprotocol.Daemon1.service \
-      $out/share/dbus-1/services/org.openpenprotocol.Daemon1.service
-    substituteInPlace $out/share/dbus-1/services/org.openpenprotocol.Daemon1.service \
+    install -Dm644 data/dbus/session-services/io.github.gonzalezerik.Px13Pen.Daemon1.service \
+      $out/share/dbus-1/services/io.github.gonzalezerik.Px13Pen.Daemon1.service
+    substituteInPlace $out/share/dbus-1/services/io.github.gonzalezerik.Px13Pen.Daemon1.service \
       --replace-fail "@PREFIX@" "$out"
 
-    install -Dm644 data/polkit/org.openpenprotocol.policy \
-      $out/share/polkit-1/actions/org.openpenprotocol.policy
+    install -Dm644 data/polkit/io.github.gonzalezerik.Px13Pen.policy \
+      $out/share/polkit-1/actions/io.github.gonzalezerik.Px13Pen.policy
 
-    install -Dm644 data/systemd/system/opp-pair-helper.service \
-      $out/lib/systemd/system/opp-pair-helper.service
-    substituteInPlace $out/lib/systemd/system/opp-pair-helper.service \
+    install -Dm644 data/systemd/system/px13pen-pair-helper.service \
+      $out/lib/systemd/system/px13pen-pair-helper.service
+    substituteInPlace $out/lib/systemd/system/px13pen-pair-helper.service \
       --replace-fail "@PREFIX@" "$out"
 
-    install -Dm644 data/systemd/user/oppd.service \
-      $out/lib/systemd/user/oppd.service
-    substituteInPlace $out/lib/systemd/user/oppd.service \
+    install -Dm644 data/systemd/user/px13pend.service \
+      $out/lib/systemd/user/px13pend.service
+    substituteInPlace $out/lib/systemd/user/px13pend.service \
       --replace-fail "@PREFIX@" "$out"
-    install -Dm644 data/systemd/user-preset/80-open-pen-protocol.preset \
-      $out/lib/systemd/user-preset/80-open-pen-protocol.preset
+    install -Dm644 data/systemd/user-preset/80-px13-sa205h-linux.preset \
+      $out/lib/systemd/user-preset/80-px13-sa205h-linux.preset
 
-    install -Dm644 crates/opp-settings/data/org.openpenprotocol.Settings.desktop \
-      $out/share/applications/org.openpenprotocol.Settings.desktop
-    install -Dm644 crates/opp-settings/data/icons/hicolor/scalable/apps/org.openpenprotocol.Settings.svg \
-      $out/share/icons/hicolor/scalable/apps/org.openpenprotocol.Settings.svg
+    install -Dm644 crates/px13pen-settings/data/io.github.gonzalezerik.Px13Pen.Settings.desktop \
+      $out/share/applications/io.github.gonzalezerik.Px13Pen.Settings.desktop
+    install -Dm644 crates/px13pen-settings/data/icons/hicolor/scalable/apps/io.github.gonzalezerik.Px13Pen.Settings.svg \
+      $out/share/icons/hicolor/scalable/apps/io.github.gonzalezerik.Px13Pen.Settings.svg
   '';
   meta = {
     description = "Linux support for MPP 2.6 haptic pens";
     license = lib.licenses.agpl3Plus;
-    mainProgram = "oppd";
+    mainProgram = "px13pend";
     platforms = [ "x86_64-linux" "aarch64-linux" ];
   };
 }

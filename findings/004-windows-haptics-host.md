@@ -82,9 +82,9 @@ Solved (all STATIC; addresses = Ghidra entry points in the image above):
 
 ## Consequences for the project
 
-- `docs/protocol/haptics.md` now carries the full normative model for oppd's haptics module
+- `docs/protocol/haptics.md` now carries the full normative model for px13pend's haptics module
   (output-report-only playback, fallback rules, timing semantics, system-originated map).
-- The oppd haptics output can be specified byte-for-byte from the captured SA205H descriptor +
+- The px13pend haptics output can be specified byte-for-byte from the captured SA205H descriptor +
   this model; still gated on byte-level approval before any output report is sent.
 - Remaining threads are observation-only (Windows session 4): notification-type enum
   semantics and the persistence store.

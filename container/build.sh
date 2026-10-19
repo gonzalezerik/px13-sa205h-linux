@@ -10,7 +10,7 @@ arch="${ARCH:-}"
 for libc in ${@:-glibc musl}; do
   platform=()
   [ -n "$arch" ] && platform=(--platform "linux/$arch")
-  podman build "${platform[@]}" -f "container/Containerfile.$libc" --target test -t "open-pen-protocol:$libc-test" .
-  podman build "${platform[@]}" -f "container/Containerfile.$libc" -t "open-pen-protocol:$libc${arch:+-$arch}" .
-  podman run --rm "open-pen-protocol:$libc${arch:+-$arch}" --version
+  podman build "${platform[@]}" -f "container/Containerfile.$libc" --target test -t "px13-sa205h-linux:$libc-test" .
+  podman build "${platform[@]}" -f "container/Containerfile.$libc" -t "px13-sa205h-linux:$libc${arch:+-$arch}" .
+  podman run --rm "px13-sa205h-linux:$libc${arch:+-$arch}" --version
 done

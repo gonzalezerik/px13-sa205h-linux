@@ -71,7 +71,7 @@ Key facts (own words; details → docs/protocol/haptics-bt.md later):
   `hid_haptic_input_configured` for MT_CLS_WIN_8 (lines 1958-64). `CONFIG_HID_HAPTIC` help text
   says "Haptic touchpad support … Elan 2703". **No driver binds usage page 0x0E on a pen/stylus or
   Bluetooth device.** → The upstream gap: nothing on Linux turns an MPP 2.6 pen's haptics collection
-  into an FF device; oppd must own that in userspace, and that's also the shape of the eventual
+  into an FF device; px13pend must own that in userspace, and that's also the shape of the eventual
   upstream patch. [STATIC]
 - MPP inking path: `hid-multitouch`/`hid-input` map HID_DG_* usages; confirmed our fixture's Stylus
   node (event9) exists. **Azimuth quirk:** `HID_DG_AZIMUTH` (0..360) is mapped to
@@ -89,7 +89,7 @@ Key facts (own words; details → docs/protocol/haptics-bt.md later):
   `SET_REPORT`, BlueZ forwards it as an HIDP control message (`hidp_send_set_report`,
   profiles/input/device.c:699-737). **Consequence:** an output report written by userspace to the
   pen's hidraw/uhid device can reach the pen — the transport path for haptics exists without
-  touching BlueZ. [STATIC — end-to-end write still to be proven on hardware, required before oppd writes]
+  touching BlueZ. [STATIC — end-to-end write still to be proven on hardware, required before px13pend writes]
 
 ## 5. libinput state (DOC — libinput 1.31.0 docs, fetched 2026-10-17)
 
@@ -121,8 +121,8 @@ Key facts (own words; details → docs/protocol/haptics-bt.md later):
 ## 7. Gaps this project must fill (scope confirmation)
 
 1. **Seamless pairing** (ELAN 0xFFF4 vendor TLC reports 86/110/111/112): Windows-only, no Linux
-   equivalent anywhere. → seamless-pairing analysis, then oppd. [HYPOTHESIS that it's BD_ADDR+key handoff]
-2. **Haptics host**: no Linux support (kernel/BlueZ/libinput). oppd writes the pen's
+   equivalent anywhere. → seamless-pairing analysis, then px13pend. [HYPOTHESIS that it's BD_ADDR+key handoff]
+2. **Haptics host**: no Linux support (kernel/BlueZ/libinput). px13pend writes the pen's
    manual-trigger output report via hidraw-over-BlueZ; expose FF via uhid? (design decision,
    Daemon work — either evdev FF_HAPTIC through a uhid shim, or app-facing D-Bus only). [HYPOTHESIS]
 3. **Azimuth end-to-end**: kernel compresses to ABS_MT_ORIENTATION ±90°; libinput exposes no azimuth.

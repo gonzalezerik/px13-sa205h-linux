@@ -102,7 +102,7 @@ collection's other vendor reports and the firmware-update collection stay untouc
 
 - `tools/capture/linux/06-seamless-pairing.py` runs the whole flow against the installed package
   (BlueZ through an interactive `bluetoothctl` with a KeyboardOnly agent). It is the reference.
-- The daemon's own pairing path still predates these findings: `oppd serve` pairs the announced
+- The daemon's own pairing path still predates these findings: `px13pend serve` pairs the announced
   address through `ConnectDevice` or the management helper with Just Works, which this pen never
   answers. It is being replaced by the flow above (register host at start, scan armed while a pen is
   in range, key on announcement, pair the advertiser through the daemon's own KeyboardOnly agent,

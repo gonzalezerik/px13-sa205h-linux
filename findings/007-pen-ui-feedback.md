@@ -67,7 +67,7 @@ correlate with the **end of a hover interaction** — the pen pulled out of rang
 which fits the ordinal-6 `hover` waveform the pen reports (006 §4). The sixth tick (4992, t 166.4)
 falls between later steps and is unmapped. Treat "Windows buzzes the pen on hover-out" as a
 **[HYP]** for event semantics (the frame correlation is solid, the causal event is inferred);
-the Linux check is one line: hover the pen, lift out of range, watch `oppd`/hcidump for a write to
+the Linux check is one line: hover the pen, lift out of range, watch `px13pend`/hcidump for a write to
 the haptics handle. **[V-VID correlation / HYP semantics]**
 
 ## 5. Press-and-hold without the barrel (step 3): ≤1.9 s to the right-click
@@ -113,7 +113,7 @@ Consequences:
   every case: whatever gates pen press-and-hold, 2300 ms is visibly not it.
 - For parity: a Linux stack that draws no press-and-hold ring is showing a **gap**, not parity —
   Windows does render one. The hover glyph (§3) and this ring are display-layer visuals; whether
-  OPP draws the ring (e.g. a layer-shell overlay following the cursor) or a compositor/toolkit
+  this project draws the ring (e.g. a layer-shell overlay following the cursor) or a compositor/toolkit
   should is an open question for the maintainer, recorded here, not decided.
 
 ## 6. The context menu

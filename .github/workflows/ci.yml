@@ -33,8 +33,8 @@ jobs:
         run: podman build -f container/Containerfile.${{ matrix.libc }} --target test .
       - name: runtime image
         run: |
-          podman build -f container/Containerfile.${{ matrix.libc }} -t open-pen-protocol:${{ matrix.libc }} .
-          podman run --rm open-pen-protocol:${{ matrix.libc }} --version
+          podman build -f container/Containerfile.${{ matrix.libc }} -t px13-sa205h-linux:${{ matrix.libc }} .
+          podman run --rm px13-sa205h-linux:${{ matrix.libc }} --version
 
   nix:
     name: nix / ${{ matrix.arch }}

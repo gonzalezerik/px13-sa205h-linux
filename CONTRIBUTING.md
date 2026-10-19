@@ -1,4 +1,4 @@
-# Contributing to Open Pen Protocol
+# Contributing to PX13 SA205H Linux
 
 Thanks for helping. These rules keep the history clean and the project safe for
 people's pens, digitizers and private data.
@@ -98,7 +98,7 @@ per line). That file is git-ignored, so the terms it protects are never publishe
 
 ## 5. License and evidence
 
-Open Pen Protocol is licensed under the **GNU AGPL-3.0-or-later** (see `LICENSE`). By
+PX13 SA205H Linux is licensed under the **GNU AGPL-3.0-or-later** (see `LICENSE`). By
 contributing you agree your contribution is released under that license. Code
 reused from other projects keeps its header, is named in the commit body and is
 allowed only from AGPL/GPL-3.0(+), MIT, BSD, Apache-2.0, MPL-2.0 or LGPL-3.0

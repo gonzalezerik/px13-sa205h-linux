@@ -4,7 +4,7 @@
 # First live haptics run. These are the project's first writes to a pen,
 # so nothing leaves the USB/air without a per-step yes: every effect is
 # first printed as the exact output-report bytes (docs/protocol/haptics.md
-# §2.7 layout), and only after a "y" does oppd send it.
+# §2.7 layout), and only after a "y" does px13pend send it.
 #
 # Prerequisite: the pen is already paired (see 04-tap-to-pair.sh) and
 # awake — touch the tip to the screen right before each send, the BLE
@@ -12,9 +12,9 @@
 # (the shipped uaccess rule, docs/packaging.md).
 #
 # Usage (from the repo root, on the PX13):
-#   nix build .                     # or: cargo build --release -p oppd
+#   nix build .                     # or: cargo build --release -p px13pend
 #   tools/capture/linux/05-first-haptics.sh [outdir]
-# Set OPPD=/path/to/oppd to use a different daemon build.
+# Set PX13PEND=/path/to/px13pend to use a different daemon build.
 #
 # What each step should feel like, from the Windows-side wire session
 # (findings/006 §4): one crisp click in the air; the success chirp
@@ -28,10 +28,10 @@ set -euo pipefail
 outdir="${1:-captures/linux}"
 dir="$outdir/first-haptics-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$dir"
-oppd="${OPPD:-result/bin/oppd}"
-if [ ! -x "$oppd" ]; then
-  echo "build the daemon first: nix build . (result/bin/oppd) or" >&2
-  echo "cargo build --release -p oppd — or point OPPD at a built binary" >&2
+px13pend="${PX13PEND:-result/bin/px13pend}"
+if [ ! -x "$px13pend" ]; then
+  echo "build the daemon first: nix build . (result/bin/px13pend) or" >&2
+  echo "cargo build --release -p px13pend — or point PX13PEND at a built binary" >&2
   exit 1
 fi
 log="$dir/run.log"
@@ -48,12 +48,12 @@ step() {
   local label="$1"; shift
   echo | tee -a "$log"
   echo "== $label ==" | tee -a "$log"
-  "$oppd" haptic "$@" | tee -a "$log"
+  "$px13pend" haptic "$@" | tee -a "$log"
   printf 'send these bytes to the pen? [y/N] '
   local answer
   read -r answer
   if [ "$answer" = "y" ]; then
-    "$oppd" haptic "$@" --send | tee -a "$log"
+    "$px13pend" haptic "$@" --send | tee -a "$log"
     printf 'felt it? describe in one line (empty ok): '
     read -r felt
     echo "felt: $felt" | tee -a "$log"
@@ -71,11 +71,11 @@ step "3/5 stop (never exercised — the experiment)" stop
 
 echo | tee -a "$log"
 echo "== 4/5 ink texture ==" | tee -a "$log"
-"$oppd" haptic ink --cutoff-ms 2000 | tee -a "$log"
+"$px13pend" haptic ink --cutoff-ms 2000 | tee -a "$log"
 printf 'send, then immediately draw a few strokes: [y/N] '
 read -r answer
 if [ "$answer" = "y" ]; then
-  "$oppd" haptic ink --cutoff-ms 2000 --send | tee -a "$log"
+  "$px13pend" haptic ink --cutoff-ms 2000 --send | tee -a "$log"
   echo "draw now; press Enter when done."
   read -r
   printf 'texture while touching, nothing in the air? (one line): '
@@ -90,10 +90,10 @@ echo "== 5/5 stop mid-texture (needs step 4 sent) ==" | tee -a "$log"
 printf 'send ink, draw, then stop mid-way? [y/N] '
 read -r answer
 if [ "$answer" = "y" ]; then
-  "$oppd" haptic ink --cutoff-ms 2000 --send | tee -a "$log"
+  "$px13pend" haptic ink --cutoff-ms 2000 --send | tee -a "$log"
   echo "draw; press Enter to send Stop."
   read -r
-  "$oppd" haptic stop --send | tee -a "$log"
+  "$px13pend" haptic stop --send | tee -a "$log"
   printf 'did the texture stop at once? (one line): '
   read -r felt
   echo "felt: $felt" | tee -a "$log"

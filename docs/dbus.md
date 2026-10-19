@@ -1,20 +1,20 @@
-# The OPP D-Bus interface — version 1
+# The Px13Pen D-Bus interface — version 1
 
-The interface `oppd` exports is the project's product (docs/decisions.md): frontends —
-`oppctl`, the tray, the settings window, bar modules — are all clients of it and never touch
+The interface `px13pend` exports is the project's product (docs/decisions.md): frontends —
+`px13penctl`, the tray, the settings window, bar modules — are all clients of it and never touch
 the hardware. A pen is described by its **capabilities**, never by a model or a protocol name.
 
-Status: **v1, implemented** by `oppd serve` (`crates/oppd/src/service.rs`).
+Status: **v1, implemented** by `px13pend serve` (`crates/px13pend/src/service.rs`).
 
 ## 1. Naming, bus, availability
 
-- Well-known name: **`org.openpenprotocol.Daemon1`**.
-- Bus: the **session bus** by default. `oppd serve --system` exports the same interface on
+- Well-known name: **`io.github.gonzalezerik.Px13Pen.Daemon1`**.
+- Bus: the **session bus** by default. `px13pend serve --system` exports the same interface on
   the system bus instead, for a system-wide daemon layout; clients find it on the bus they
-  use. `oppd` always talks to BlueZ on the system bus, whichever bus it exports on.
-- Namespace: no domain is registered for the project yet, so `org.openpenprotocol` is a
-  project-chosen bus name rather than a reverse domain. If that ever needs to change, the
-  rename is a major version bump (§2).
+  use. `px13pend` always talks to BlueZ on the system bus, whichever bus it exports on.
+- Namespace: `io.github.gonzalezerik.Px13Pen` is the reverse domain of the project's
+  repository (`github.com/gonzalezerik/px13-sa205h-linux`). If that ever needs to change,
+  the rename is a major version bump (§2).
 
 ## 2. Versioning
 
@@ -29,8 +29,8 @@ Status: **v1, implemented** by `oppd serve` (`crates/oppd/src/service.rs`).
 
 | Path | Interfaces | |
 |---|---|---|
-| `/org/openpenprotocol/Daemon` | `org.openpenprotocol.Daemon1` | one per daemon |
-| `/org/openpenprotocol/pen/dev_00_01_02_03_04_05` | `org.openpenprotocol.Pen1`, plus `org.openpenprotocol.Haptics1` when the pen does haptics | one per known pen |
+| `/io/github/gonzalezerik/Px13Pen/Daemon` | `io.github.gonzalezerik.Px13Pen.Daemon1` | one per daemon |
+| `/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05` | `io.github.gonzalezerik.Px13Pen.Pen1`, plus `io.github.gonzalezerik.Px13Pen.Haptics1` when the pen does haptics | one per known pen |
 
 Pen object paths embed the Bluetooth address in the BlueZ style: `dev_` followed by the
 six address bytes in lower-case hex, underscore-separated.
@@ -40,16 +40,16 @@ object exists while BlueZ knows the device (bonded pens included after a restart
 removed when BlueZ forgets it — announcing a not-yet-paired pen does **not** create one.
 `org.freedesktop.DBus.ObjectManager` on the root object is planned, not in v1.
 
-## 4. `org.openpenprotocol.Daemon1`
+## 4. `io.github.gonzalezerik.Px13Pen.Daemon1`
 
 ### Properties
 
 | Property | Type | Meaning |
 |---|---|---|
 | `ApiVersion` | `u` | major version of this interface, `1` |
-| `Version` | `s` | `oppd` package version |
+| `Version` | `s` | `px13pend` package version |
 | `PairingActive` | `b` | the touch-to-pair listener is running |
-| `SupportedDigitizers` | `a(qqs)` | vendor, product, name — what `oppd` can listen on |
+| `SupportedDigitizers` | `a(qqs)` | vendor, product, name — what `px13pend` can listen on |
 
 ### Methods
 
@@ -65,7 +65,7 @@ host sends a pairing key, and the pen advertises; the host pairs that advertiser
 entry (passkey 0, §3 there) and trusts it. **The daemon does not implement this flow yet**: it
 still connects to the announced address with Just Works (`ConnectDevice`, or the pairing helper
 where BlueZ lacks it), which this pen does not answer. The interface below stays as it is when
-the flow is replaced. When a supported digitizer is present the listener runs from the moment `oppd` starts, so
+the flow is replaced. When a supported digitizer is present the listener runs from the moment `px13pend` starts, so
 bringing a new pen near the screen is all it takes. `StopPairing()` turns it off;
 `StartPairing()` turns it back on and retries every pen at once.
 
@@ -83,7 +83,7 @@ bond, and the first failure of a streak, raises a desktop notification
 | `PenRemoved` | `o path` | a pen object was removed; `name` is gone with it |
 | `PairingEvent` | `s kind, s detail` | pairing progress: `kind` is `announced` (digitizer reported a candidate), `bonded` (BlueZ pairing and trust done) or `failed` (BlueZ refused). `detail` is the address, plus a short reason for `failed`. |
 
-## 5. `org.openpenprotocol.Pen1`
+## 5. `io.github.gonzalezerik.Px13Pen.Pen1`
 
 ### Properties
 
@@ -111,7 +111,7 @@ ignored.
 | `pairing` | `s` | `"seamless-touch"` — tip-to-screen pairing via the digitizer announcement; `"manual"` — pair like any Bluetooth device |
 | `haptics` | `a{sv}` | present when the pen plays haptics. `waveforms`: `a(qsqb)` — `(ordinal, name, duration_ms, continuous)` for each playable waveform. Continuous waveforms are felt only while the tip is in contact (the pen auto-triggers them from the tip switch, findings/006 §4). |
 | `buttons` | `a{sv}` | `barrel`: `b` — the barrel switch, reported in-band by the digitizer, not over Bluetooth; `shortcut`: `b` — the top-end button over Bluetooth; `shortcut-gestures`: `as` — the gestures the pen itself distinguishes, from `"single"`, `"double"`, `"long"` (findings/006 §5: the pen classifies them, the host must not re-time) |
-| `battery` | `s` | `"ble-battery-service"` — the standard Bluetooth battery service, also visible in UPower without OPP; `"none"` |
+| `battery` | `s` | `"ble-battery-service"` — the standard Bluetooth battery service, also visible in UPower without this daemon; `"none"` |
 | `settings` | `a{sv}` | settings stored **in the pen** (as opposed to host policy). None today on supported pens, so the key is absent; keys will be added when a pen with stored settings is supported. |
 
 For the first supported pen (SA205H-class), `waveforms` carries:
@@ -130,7 +130,7 @@ Ordinals 1 (`none`) and 2 (`stop`) are not waveforms — they are implicit comma
 `Haptics1`. The waveform list is what the pen's capability report returns; a frontend
 must draw its haptics UI from this array, not from a hardcoded effect list.
 
-## 7. `org.openpenprotocol.Haptics1`
+## 7. `io.github.gonzalezerik.Px13Pen.Haptics1`
 
 Exported on a pen path **only when** `Capabilities` has `haptics`. Every method returns
 whether a report was actually written to the pen; suppression is not an error.
@@ -161,7 +161,7 @@ docs/protocol/haptics.md §2):
 | `Enabled` | `b` r/w | master haptics switch. `false` makes every method return `false` without touching the pen — exactly what the Windows toggles do (findings/006 §4). |
 | `Intensity` | `y` r/w | default strength for `PlayEffect`/`PlayOrdinal` calls that pass the `255` sentinel; 0–100, default 100. |
 
-Policy only: `Enabled` and `Intensity` are what `oppd` applies at play time, never
+Policy only: `Enabled` and `Intensity` are what `px13pend` applies at play time, never
 written to the pen, and **not yet persisted across daemon restarts** — a settings file
 lands with the settings app.
 
@@ -178,15 +178,15 @@ message text so clients can branch:
 - `Failed("pairing-inactive: …")` — `StopPairing` while inactive is *not* an error
   (idempotent); reserved for real pairing-listener failures.
 
-`org.openpenprotocol.Error.*` is reserved for future majors.
+`io.github.gonzalezerik.Px13Pen.Error.*` is reserved for future majors.
 
 ## 9. Not in v1 (deliberately)
 
 - `ObjectManager` / `GetManagedObjects` on the root object.
 - Button **events**: the shortcut button's key codes are still being identified
-  (`oppd watch-buttons`), so v1 declares the buttons capability but emits no signals;
+  (`px13pend watch-buttons`), so v1 declares the buttons capability but emits no signals;
   the plan is a `ButtonEvent` signal on `Pen1` and a `uinput` key emitter owned by
-  `oppd` (docs/decisions.md), which needs no interface change for the emitter itself.
+  `px13pend` (docs/decisions.md), which needs no interface change for the emitter itself.
 - Persisted settings, D-Bus service activation.
 - The app-facing haptics portal (xdg-desktop-portal) — a separate interface on top of
   this one, out of scope here (docs/decisions.md §scope, item 3).
@@ -194,13 +194,13 @@ message text so clients can branch:
 ## 10. Trying it
 
 ```console
-$ oppd serve &
-$ busctl --user call org.openpenprotocol.Daemon1 \
-    /org/openpenprotocol/Daemon org.openpenprotocol.Daemon1 ListPens
-ao 1 "/org/openpenprotocol/pen/dev_00_01_02_03_04_05"
-$ busctl --user call org.openpenprotocol.Daemon1 \
-    /org/openpenprotocol/pen/dev_00_01_02_03_04_05 \
-    org.openpenprotocol.Haptics1 PlayEffect s y y q q "click" 255 1 0 0
+$ px13pend serve &
+$ busctl --user call io.github.gonzalezerik.Px13Pen.Daemon1 \
+    /io/github/gonzalezerik/Px13Pen/Daemon io.github.gonzalezerik.Px13Pen.Daemon1 ListPens
+ao 1 "/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05"
+$ busctl --user call io.github.gonzalezerik.Px13Pen.Daemon1 \
+    /io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05 \
+    io.github.gonzalezerik.Px13Pen.Haptics1 PlayEffect s y y q q "click" 255 1 0 0
 b true
 ```
 

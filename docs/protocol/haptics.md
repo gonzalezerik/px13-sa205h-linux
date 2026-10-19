@@ -192,7 +192,7 @@ Full evidence, including the felt-impressions panel and per-test timelines:
 8. Not all buzz is host-commanded: the top-button press-and-hold buzz has **no host write** behind
    it (pen-local feedback — findings/006 §5).
 
-## 3. What oppd must reproduce (normative checklist)
+## 3. What px13pend must reproduce (normative checklist)
 
 1. Read Waveform List + Duration List once per pen connection via **GET_FEATURE** (allowed:
    reads are non-destructive); build the ordinal↔waveform table. [DOC §1, STATIC §2.1]

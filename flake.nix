@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 {
-  description = "Open Pen Protocol: Linux support for MPP 2.6 haptic pens";
+  description = "Linux support for the ASUS Pen 3.0 (SA205H) on the ASUS ProArt PX13 (HN7306)";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/44a91898084f46797b5fac650c7e8c9ac38c43d4";
 
@@ -20,39 +20,39 @@
       # For NixOS and any other nixpkgs consumer that prefers the package
       # in the package set.
       overlays.default = final: prev: {
-        open-pen-protocol = final.callPackage ./nix/package.nix { };
+        px13-sa205h-linux = final.callPackage ./nix/package.nix { };
       };
 
       # Importing this module (plus the overlay, included here) is the
       # whole system setup: rules, activation files, polkit action and
       # units all ship in the package, and nothing needs enabling.
       nixosModules.default = { ... }: {
-        imports = [ self.nixosModules.open-pen-protocol ];
+        imports = [ self.nixosModules.px13-sa205h-linux ];
         nixpkgs.overlays = [ self.overlays.default ];
       };
 
       # The same thing without the overlay, for systems that already
-      # carry open-pen-protocol in their package set.
-      nixosModules.open-pen-protocol = { config, lib, pkgs, ... }: {
-        options.services.open-pen-protocol.enable =
-          lib.mkEnableOption "Open Pen Protocol, MPP 2.6 haptic pen support";
+      # carry px13-sa205h-linux in their package set.
+      nixosModules.px13-sa205h-linux = { config, lib, pkgs, ... }: {
+        options.services.px13-sa205h-linux.enable =
+          lib.mkEnableOption "PX13 SA205H Linux (px13pend daemon and pen settings)";
 
-        config = lib.mkIf config.services.open-pen-protocol.enable {
-          environment.systemPackages = [ pkgs.open-pen-protocol ];
+        config = lib.mkIf config.services.px13-sa205h-linux.enable {
+          environment.systemPackages = [ pkgs.px13-sa205h-linux ];
 
           # uaccess rules for the digitizer and the pen, from the
           # generated rule in lib/udev/rules.d.
-          services.udev.packages = [ pkgs.open-pen-protocol ];
+          services.udev.packages = [ pkgs.px13-sa205h-linux ];
 
           # D-Bus activation: the pairing helper on the system bus and
-          # oppd on each session bus. Both start on demand.
-          services.dbus.packages = [ pkgs.open-pen-protocol ];
+          # px13pend on each session bus. Both start on demand.
+          services.dbus.packages = [ pkgs.px13-sa205h-linux ];
 
-          # opp-pair-helper.service (D-Bus activated, no [Install]) and
-          # oppd.service, which starts with every graphical session so the
+          # px13pen-pair-helper.service (D-Bus activated, no [Install]) and
+          # px13pend.service, which starts with every graphical session so the
           # touch-to-pair listener is up before the pen comes near.
-          systemd.packages = [ pkgs.open-pen-protocol ];
-          systemd.user.services.oppd.wantedBy = [ "graphical-session.target" ];
+          systemd.packages = [ pkgs.px13-sa205h-linux ];
+          systemd.user.services.px13pend.wantedBy = [ "graphical-session.target" ];
         };
       };
 
@@ -69,7 +69,7 @@
             packages = with pkgs; [
               # Rust (both libcs are built by container/build.sh with podman)
               cargo rustc clippy rustfmt rust-analyzer cargo-deny pkg-config
-              # opp-settings builds against these
+              # px13pen-settings builds against these
               gtk4 libadwaita
               # reverse-engineering workbench (Ghidra runs headless only)
               nodejs_24 procps util-linux ghidra jdk21 rizin radare2 gdb ilspycmd

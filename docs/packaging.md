@@ -12,16 +12,16 @@ overridden individually for distro layouts.
 
 | Destination (under `DESTDIR` + `PREFIX` unless noted) | File |
 |---|---|
-| `bin/` | `oppd`, `oppctl`, `opp-settings` |
-| `libexec/` | `opp-pair-helper` (privileged, not a command) |
-| `lib/udev/rules.d/` | `70-open-pen-protocol.rules` (generated, see below) |
-| `share/dbus-1/system-services/` | `org.openpenprotocol.PairHelper1.service` (system activation) |
-| `share/dbus-1/system.d/` | `org.openpenprotocol.PairHelper1.conf` (bus policy) |
-| `share/dbus-1/services/` | `org.openpenprotocol.Daemon1.service` (session activation) |
-| `share/polkit-1/actions/` | `org.openpenprotocol.policy` |
-| `lib/systemd/system/` | `opp-pair-helper.service` (D-Bus activated, no `[Install]`) |
-| `lib/systemd/user/` | `oppd.service` (starts with the graphical session) |
-| `lib/systemd/user-preset/` | `80-open-pen-protocol.preset` (`enable oppd.service`) |
+| `bin/` | `px13pend`, `px13penctl`, `px13pen-settings` |
+| `libexec/` | `px13pen-pair-helper` (privileged, not a command) |
+| `lib/udev/rules.d/` | `70-px13-sa205h-linux.rules` (generated, see below) |
+| `share/dbus-1/system-services/` | `io.github.gonzalezerik.Px13Pen.PairHelper1.service` (system activation) |
+| `share/dbus-1/system.d/` | `io.github.gonzalezerik.Px13Pen.PairHelper1.conf` (bus policy) |
+| `share/dbus-1/services/` | `io.github.gonzalezerik.Px13Pen.Daemon1.service` (session activation) |
+| `share/polkit-1/actions/` | `io.github.gonzalezerik.Px13Pen.policy` |
+| `lib/systemd/system/` | `px13pen-pair-helper.service` (D-Bus activated, no `[Install]`) |
+| `lib/systemd/user/` | `px13pend.service` (starts with the graphical session) |
+| `lib/systemd/user-preset/` | `80-px13-sa205h-linux.preset` (`enable px13pend.service`) |
 | `share/applications/`, `share/icons/` | settings window entry and icon |
 
 Overridable variables: `BINDIR`, `LIBEXECDIR`, `UDEVRULESDIR`, `DBUS_SYSTEM_SERVICES_DIR`,
@@ -34,11 +34,11 @@ preset once:
 
 ```sh
 udevadm control --reload-rules && udevadm trigger
-systemctl --global preset oppd.service
+systemctl --global preset px13pend.service
 ```
 
 Distribution packaging does both from its usual install hooks, so users run neither. From
-then on `oppd` starts with every graphical session: the touch-to-pair listener has to be
+then on `px13pend` starts with every graphical session: the touch-to-pair listener has to be
 up before a new pen first comes near the screen, which is why it does not wait for a D-Bus
 call (session activation still starts it on demand where the preset was not applied). The
 pairing helper is activated by the system bus when first called (`Type=dbus`) and needs
@@ -49,14 +49,14 @@ D-Bus only reads activation files named after the bus name they declare, plus `.
 
 ## The udev rule is generated
 
-`contrib/udev/70-open-pen-protocol.rules` is produced by
+`contrib/udev/70-px13-sa205h-linux.rules` is produced by
 
 ```sh
 cargo xtask generate-udev-rules      # rewrite it
 cargo xtask generate-udev-rules --check   # what CI runs; fails on drift
 ```
 
-from the supported-device tables in `opp-core`, so a new device lands in the rule at the same
+from the supported-device tables in `px13pen-core`, so a new device lands in the rule at the same
 commit that adds support for it. The rule only adds `TAG+="uaccess"` for the pen-related
 `hidraw` nodes. The leading digits of each `hidraw` parent name are the **HID bus type**, not a
 boot-volatile number: `0018` is HID over I2C (the built-in digitizer), `0005` is HID over
@@ -75,17 +75,17 @@ machine.
 Pairing normally goes through BlueZ `Adapter1.ConnectDevice`. That method is
 `[experimental]` in current BlueZ releases, and enabling it would mean asking users to edit
 `main.conf` — not acceptable. Instead the daemon detects the missing method and calls
-`org.openpenprotocol.PairHelper1`, a D-Bus-activated helper that asks the kernel directly
+`io.github.gonzalezerik.Px13Pen.PairHelper1`, a D-Bus-activated helper that asks the kernel directly
 over the Bluetooth management socket (`MGMT_OP_PAIR_DEVICE`, Just Works). The helper:
 
-- checks the polkit action `org.openpenprotocol.pair-pen` against the *calling connection*
+- checks the polkit action `io.github.gonzalezerik.Px13Pen.pair-pen` against the *calling connection*
   before doing anything (active local sessions: yes; anything else: no);
 - accepts only Bluetooth random static addresses — the kind the digitizer announces — and
   has no other function;
 - runs as root but with `CapabilityBoundingSet=CAP_NET_ADMIN` and the usual unit sandboxing,
   and cannot be reached except through the bus policy in `data/dbus/system.d/`.
 
-After a kernel-initiated bond the user's own `oppd` marks the device `Trusted`; no process
+After a kernel-initiated bond the user's own `px13pend` marks the device `Trusted`; no process
 other than the pairing moment is privileged at all.
 
 ## NixOS
@@ -94,30 +94,30 @@ The flake's module is the zero-config path there:
 
 ```nix
 {
-  imports = [ inputs.open-pen-protocol.nixosModules.default ];
-  services.open-pen-protocol.enable = true;
+  imports = [ inputs.px13-sa205h-linux.nixosModules.default ];
+  services.px13-sa205h-linux.enable = true;
 }
 ```
 
 It puts the package in the system profile and registers the same files the tarball ships:
 `services.udev.packages`, `services.dbus.packages` (activation + policy), `systemd.packages`
-(units) with `oppd` wanted by `graphical-session.target`, and the polkit action via the
+(units) with `px13pend` wanted by `graphical-session.target`, and the polkit action via the
 standard data dirs. The overlay
-(`overlays.default`) exposes `pkgs.open-pen-protocol` for systems that want it in the package
-set directly; `nixosModules.open-pen-protocol` is the same module for those systems.
+(`overlays.default`) exposes `pkgs.px13-sa205h-linux` for systems that want it in the package
+set directly; `nixosModules.px13-sa205h-linux` is the same module for those systems.
 
 ## Distribution packages
 
 The layout above is the contract: a `.deb`/`.rpm` post-install scriptlet needs
 `udevadm control --reload-rules && udevadm trigger`, a polkit/DBus reload
 (`systemctl reload polkit dbus`, or they re-read on next activation) and the user preset
-(`%systemd_user_post oppd.service` on Fedora, `dh_installsystemduser` on Debian — both apply
-`80-open-pen-protocol.preset`). `oppd` then starts at each user's next login; nothing is
+(`%systemd_user_post px13pend.service` on Fedora, `dh_installsystemduser` on Debian — both apply
+`80-px13-sa205h-linux.preset`). `px13pend` then starts at each user's next login; nothing is
 enabled system-wide.
 
-**Flatpak/Snap**: `oppd` cannot live in either — it needs the session D-Bus, the system
+**Flatpak/Snap**: `px13pend` cannot live in either — it needs the session D-Bus, the system
 BlueZ service and `/dev/hidraw` device access under the conventions above, which the
-sandboxing models are not built for. `opp-settings` is a candidate for a future Flatpak since
-it only talks to `org.openpenprotocol.Daemon1` on the session bus. On immutable distros the
+sandboxing models are not built for. `px13pen-settings` is a candidate for a future Flatpak since
+it only talks to `io.github.gonzalezerik.Px13Pen.Daemon1` on the session bus. On immutable distros the
 NixOS module (Bazzite/NixOS) or an rpm-ostree layer of the package is the way; installing
 into `$HOME` alone cannot register the udev rule.

@@ -7,7 +7,7 @@
 //! ```
 //!
 //! `generate-udev-rules` rewrites the shipped udev rule from the device
-//! tables in `opp-core`, so the two can never drift apart; `--check`
+//! tables in `px13pen-core`, so the two can never drift apart; `--check`
 //! fails instead of writing and is what CI runs. `install` places the
 //! binaries and the service files under `$PREFIX` (default `/usr/local`,
 //! `$DESTDIR` honoured) and substitutes the prefix into the files that
@@ -19,7 +19,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process;
 
-use opp_core::{HidId, SUPPORTED_DIGITIZERS, SUPPORTED_PENS};
+use px13pen_core::{HidId, SUPPORTED_DIGITIZERS, SUPPORTED_PENS};
 
 /// HID bus type for the internal touch screen digitizer. The leading
 /// component of an `/sys/bus/hid/devices` name is the bus id, not a
@@ -49,7 +49,7 @@ fn hid_kernel_match(bus: u16, id: HidId) -> String {
     format!("{bus:04X}:{:04X}:{:04X}.*", id.vendor, id.product)
 }
 
-/// The complete contents of contrib/udev/70-open-pen-protocol.rules,
+/// The complete contents of contrib/udev/70-px13-sa205h-linux.rules,
 /// derived from the supported-device tables.
 fn rules_text() -> String {
     let mut text = String::from(
@@ -77,7 +77,7 @@ fn rules_text() -> String {
 }
 
 fn generate_udev_rules(check_only: bool) -> Result<(), String> {
-    let target = repo_root().join("contrib/udev/70-open-pen-protocol.rules");
+    let target = repo_root().join("contrib/udev/70-px13-sa205h-linux.rules");
     let text = rules_text();
     if check_only {
         let on_disk = match fs::read_to_string(&target) {
@@ -144,58 +144,58 @@ fn install() -> Result<(), String> {
         .unwrap_or_else(|_| root.join("target/release"));
 
     for (binary, dir) in [
-        ("oppd", &bindir),
-        ("oppctl", &bindir),
-        ("opp-settings", &bindir),
-        ("opp-pair-helper", &libexecdir),
+        ("px13pend", &bindir),
+        ("px13penctl", &bindir),
+        ("px13pen-settings", &bindir),
+        ("px13pen-pair-helper", &libexecdir),
     ] {
         install_binary(&target_dir.join(binary), &staged(&destdir, dir))?;
     }
 
     install_file(
-        &root.join("contrib/udev/70-open-pen-protocol.rules"),
+        &root.join("contrib/udev/70-px13-sa205h-linux.rules"),
         &staged(&destdir, &udev_rules_dir),
         0o644,
         None,
     )?;
     install_file(
-        &data.join("dbus/system-services/org.openpenprotocol.PairHelper1.service"),
+        &data.join("dbus/system-services/io.github.gonzalezerik.Px13Pen.PairHelper1.service"),
         &staged(&destdir, &dbus_system_services_dir),
         0o644,
         Some(&prefix),
     )?;
     install_file(
-        &data.join("dbus/system.d/org.openpenprotocol.PairHelper1.conf"),
+        &data.join("dbus/system.d/io.github.gonzalezerik.Px13Pen.PairHelper1.conf"),
         &staged(&destdir, &dbus_system_policy_dir),
         0o644,
         None,
     )?;
     install_file(
-        &data.join("dbus/session-services/org.openpenprotocol.Daemon1.service"),
+        &data.join("dbus/session-services/io.github.gonzalezerik.Px13Pen.Daemon1.service"),
         &staged(&destdir, &dbus_session_services_dir),
         0o644,
         Some(&prefix),
     )?;
     install_file(
-        &data.join("polkit/org.openpenprotocol.policy"),
+        &data.join("polkit/io.github.gonzalezerik.Px13Pen.policy"),
         &staged(&destdir, &polkit_action_dir),
         0o644,
         None,
     )?;
     install_file(
-        &data.join("systemd/system/opp-pair-helper.service"),
+        &data.join("systemd/system/px13pen-pair-helper.service"),
         &staged(&destdir, &systemd_system_unit_dir),
         0o644,
         Some(&prefix),
     )?;
     install_file(
-        &data.join("systemd/user/oppd.service"),
+        &data.join("systemd/user/px13pend.service"),
         &staged(&destdir, &systemd_user_unit_dir),
         0o644,
         Some(&prefix),
     )?;
     install_file(
-        &data.join("systemd/user-preset/80-open-pen-protocol.preset"),
+        &data.join("systemd/user-preset/80-px13-sa205h-linux.preset"),
         &staged(&destdir, &systemd_user_preset_dir),
         0o644,
         None,
@@ -203,15 +203,16 @@ fn install() -> Result<(), String> {
 
     // Settings window entry and icon, next to where buildRustPackage
     // already puts them from the crate's own data directory.
-    let settings_data = root.join("crates/opp-settings/data");
+    let settings_data = root.join("crates/px13pen-settings/data");
     install_file(
-        &settings_data.join("org.openpenprotocol.Settings.desktop"),
+        &settings_data.join("io.github.gonzalezerik.Px13Pen.Settings.desktop"),
         &staged(&destdir, &format!("{prefix}/share/applications")),
         0o644,
         Some(&prefix),
     )?;
     install_file(
-        &settings_data.join("icons/hicolor/scalable/apps/org.openpenprotocol.Settings.svg"),
+        &settings_data
+            .join("icons/hicolor/scalable/apps/io.github.gonzalezerik.Px13Pen.Settings.svg"),
         &staged(
             &destdir,
             &format!("{prefix}/share/icons/hicolor/scalable/apps"),
@@ -223,8 +224,8 @@ fn install() -> Result<(), String> {
     println!();
     println!("Installed under {destdir}{prefix}. If udev is running:");
     println!("  udevadm control --reload-rules && udevadm trigger");
-    println!("Then apply the user preset once, so oppd starts with every session:");
-    println!("  systemctl --global preset oppd.service");
+    println!("Then apply the user preset once, so px13pend starts with every session:");
+    println!("  systemctl --global preset px13pend.service");
     println!("(distro packaging macros do this on install). The pairing helper");
     println!("needs nothing: the system bus activates it when first called.");
     Ok(())

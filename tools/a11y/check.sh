@@ -1,12 +1,12 @@
 #!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Static accessibility checks for the settings window. They run from
-# the workspace test suite (crates/opp-settings/tests/a11y.rs), so a
+# the workspace test suite (crates/px13pen-settings/tests/a11y.rs), so a
 # widget that cannot announce itself fails the build long before it
 # reaches a screen reader. Portable: POSIX sh, grep and sed only.
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-src="$root/crates/opp-settings/src"
+src="$root/crates/px13pen-settings/src"
 if [ ! -d "$src" ]; then
     echo "check.sh: no sources at $src" >&2
     exit 2

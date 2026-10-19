@@ -79,7 +79,7 @@ Offline analysis of the Linux step-1 `hid-recorder` file (84.2 s, 13,303 frames,
   byte **`0x01`**, vs **`0x03`** on Windows. The second bit (usage `0x11`) therefore only appears
   while the Windows consumer is active; whether it is an arm/ack or a state of the digitizer is
   unknown. **[VERIFIED-HW observation, HYPOTHESIS meaning]** The pen→digitizer→host handoff works
-  without Windows: an oppd listener is all that is missing for tap-to-pair.
+  without Windows: an px13pend listener is all that is missing for tap-to-pair.
 - **Every `0x6E` is preceded within a few milliseconds by report 34** (`0xFF0F/0x50`, four signed
   32-bit, usages `0x72–0x75`); the first value carries the pen's transducer serial little-endian,
   the other three are zero (one extra report-34 frame had no follow-up `0x6E`). This answers the

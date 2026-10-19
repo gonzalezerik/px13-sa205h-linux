@@ -9,7 +9,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-opp-core = { path = "../opp-core", version = "0.0.1" }
+px13pen-core = { path = "../px13pen-core", version = "0.0.1" }
 
 [lints]
 workspace = true

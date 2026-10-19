@@ -664,58 +664,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "opp-client"
-version = "0.0.1"
-dependencies = [
- "futures-util",
- "serde",
- "zbus",
-]
-
-[[package]]
-name = "opp-core"
-version = "0.0.1"
-
-[[package]]
-name = "opp-pair-helper"
-version = "0.0.1"
-dependencies = [
- "libc",
- "zbus",
-]
-
-[[package]]
-name = "opp-settings"
-version = "0.0.1"
-dependencies = [
- "async-channel",
- "futures-util",
- "gtk4",
- "libadwaita",
- "opp-client",
-]
-
-[[package]]
-name = "oppctl"
-version = "0.0.1"
-dependencies = [
- "opp-client",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "oppd"
-version = "0.0.1"
-dependencies = [
- "futures-timer",
- "futures-util",
- "hidapi",
- "opp-core",
- "zbus",
-]
-
-[[package]]
 name = "ordered-stream"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -783,6 +731,58 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "px13pen-client"
+version = "0.0.1"
+dependencies = [
+ "futures-util",
+ "serde",
+ "zbus",
+]
+
+[[package]]
+name = "px13pen-core"
+version = "0.0.1"
+
+[[package]]
+name = "px13pen-pair-helper"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "zbus",
+]
+
+[[package]]
+name = "px13pen-settings"
+version = "0.0.1"
+dependencies = [
+ "async-channel",
+ "futures-util",
+ "gtk4",
+ "libadwaita",
+ "px13pen-client",
+]
+
+[[package]]
+name = "px13penctl"
+version = "0.0.1"
+dependencies = [
+ "px13pen-client",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "px13pend"
+version = "0.0.1"
+dependencies = [
+ "futures-timer",
+ "futures-util",
+ "hidapi",
+ "px13pen-core",
+ "zbus",
 ]
 
 [[package]]
@@ -1273,7 +1273,7 @@ dependencies = [
 name = "xtask"
 version = "0.0.0"
 dependencies = [
- "opp-core",
+ "px13pen-core",
 ]
 
 [[package]]

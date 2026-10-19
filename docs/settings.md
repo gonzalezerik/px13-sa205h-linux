@@ -1,14 +1,14 @@
-# `opp-settings` — the pen settings window
+# `px13pen-settings` — the pen settings window
 
 A GTK 4 / libadwaita window over the same D-Bus interface everything
-else uses (docs/dbus.md): one `oppd` connection, live pen cards, no
+else uses (docs/dbus.md): one `px13pend` connection, live pen cards, no
 Bluetooth and no HID from this side. It replaces the pen panel of the
 Windows driver for the controls that have a Linux meaning (the matrix
 lives in docs/parity.md).
 
 ```console
-$ opp-settings            # session-bus oppd
-$ opp-settings --system   # oppd serve --system
+$ px13pen-settings            # session-bus px13pend
+$ px13pen-settings --system   # px13pend serve --system
 ```
 
 ## What it shows
@@ -20,21 +20,21 @@ switch that would do nothing. The haptics rows are the switch
 (`Haptics1.Enabled`) and an intensity slider (`Haptics1.Intensity`,
 0–100 %).
 
-Pairing needs no button: `oppd` listens from the start and pairs a new
+Pairing needs no button: `px13pend` listens from the start and pairs a new
 pen as soon as it comes near the screen. `Search for pens` runs
 `StartPairing()`, which also retries pens whose pairing failed; pairing
 progress arrives as `PairingEvent` toasts (announced → bonded, or failed
 with the daemon's reason). Pressing it again runs `StopPairing()`.
 
-When `oppd` goes away the window stays open and says so: it is easier
+When `px13pend` goes away the window stays open and says so: it is easier
 to restart a daemon than to recover a dead settings window.
 
 ## Menu and desktop entry
 
-The corner menu holds **About Open Pen** — version, licence, upstream
+The corner menu holds **About PX13 Pen** — version, licence, upstream
 and issue links, the version read from the package metadata so it
 cannot drift. The package installs the desktop entry
-(`org.openpenprotocol.Settings`) and its icon, so the window shows up
+(`io.github.gonzalezerik.Px13Pen.Settings`) and its icon, so the window shows up
 in normal launcher searches.
 
 ## Threading and write coalescing
@@ -55,7 +55,7 @@ event.
 
 The target is WCAG 2.2 AA, and the static part is enforced before the
 UI can build: `tools/a11y/check.sh` runs as part of `cargo test` (see
-`crates/opp-settings/tests/a11y.rs`) and rejects sliders without an
+`crates/px13pen-settings/tests/a11y.rs`) and rejects sliders without an
 accessible name, icon-only buttons without a text alternative, switch
 rows without titles, and untitled windows. The runtime part — real
 AT-SPI navigation with Orca — is a manual pass against a running
