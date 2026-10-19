@@ -77,7 +77,8 @@ fn device_path(adapter: &str, address: &str) -> String {
 
 /// The only pen-named device under the adapter, by object path.
 async fn find_pen(connection: &Connection, adapter: &str) -> Result<String, String> {
-    let root = Proxy::new(connection, "org.bluez", "/org/bluez", OBJECT_MANAGER)
+    // BlueZ exports its ObjectManager on the root object.
+    let root = Proxy::new(connection, "org.bluez", "/", OBJECT_MANAGER)
         .await
         .map_err(|error| format!("BlueZ root object: {error}"))?;
     let objects: ManagedObjects = root

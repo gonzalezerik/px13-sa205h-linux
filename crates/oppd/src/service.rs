@@ -38,6 +38,8 @@ const PEN_ROOT: &str = "/org/openpenprotocol/pen";
 
 const BLUEZ: &str = "org.bluez";
 const BLUEZ_ROOT: &str = "/org/bluez";
+/// BlueZ exports its ObjectManager on the root object, not on `/org/bluez`.
+const BLUEZ_OBJECT_MANAGER_PATH: &str = "/";
 const DEVICE1: &str = "org.bluez.Device1";
 const BATTERY1: &str = "org.bluez.Battery1";
 const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
@@ -130,7 +132,11 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         .interface::<_, Daemon>(DAEMON_PATH)
         .await
         .map_err(|error| format!("Daemon interface vanished: {error}"))?;
-    state.sync_pens(&daemon, false).await?;
+    // A Bluetooth stack that is not up yet is no reason to exit: the loop
+    // syncs again every half second.
+    if let Err(error) = state.sync_pens(&daemon, false).await {
+        eprintln!("bluez sync: {error}");
+    }
     println!(
         "serving {BUS_NAME} on the {bus} bus (adapter {}, seamless pairing: {})",
         state.adapter,
@@ -614,9 +620,14 @@ impl State {
     /// The pen-named devices under the adapter — the same heuristic
     /// presence.rs uses.
     async fn scan_pens(&self) -> Result<Vec<Observation>, String> {
-        let root = Proxy::new(&self.bluez, BLUEZ, BLUEZ_ROOT, OBJECT_MANAGER)
-            .await
-            .map_err(|error| format!("BlueZ root object: {error}"))?;
+        let root = Proxy::new(
+            &self.bluez,
+            BLUEZ,
+            BLUEZ_OBJECT_MANAGER_PATH,
+            OBJECT_MANAGER,
+        )
+        .await
+        .map_err(|error| format!("BlueZ root object: {error}"))?;
         let objects: ManagedObjects = root
             .call("GetManagedObjects", &())
             .await
