@@ -65,18 +65,17 @@ machine.
 
 ## Pairing and privilege
 
-> The pairing method described in this section is being replaced. Touch-to-pair on this pen
-> works without any privileged step: register the host with the digitizer, send the key,
-> pair the pen's advertisement through BlueZ with passkey entry
-> (docs/protocol/seamless-pairing.md). Once the kernel supports LE legacy out-of-band keys,
-> the helper's remaining job is adding the key as remote out-of-band data
-> (docs/future/kernel-le-legacy-oob.md).
+Touch-to-pair needs no privileged step. The user's own `px13pend` registers the host with the
+digitizer, sends the key report, and pairs the pen's advertisement through ordinary BlueZ calls
+(`StartDiscovery`, `Device1.Pair`) with its own KeyboardOnly agent answering passkey 0, then
+marks the pen `Trusted` (docs/protocol/seamless-pairing.md). It uses nothing marked
+`[experimental]` in BlueZ, so `main.conf` stays untouched.
 
-Pairing normally goes through BlueZ `Adapter1.ConnectDevice`. That method is
-`[experimental]` in current BlueZ releases, and enabling it would mean asking users to edit
-`main.conf` — not acceptable. Instead the daemon detects the missing method and calls
-`io.github.gonzalezerik.Px13Pen.PairHelper1`, a D-Bus-activated helper that asks the kernel directly
-over the Bluetooth management socket (`MGMT_OP_PAIR_DEVICE`, Just Works). The helper:
+The package still ships a small privileged pairing helper, no longer used for touch-to-pair. It
+is kept for one future job: once the kernel supports LE legacy out-of-band keys, adding the
+key as remote out-of-band data over the management socket
+(docs/future/kernel-le-legacy-oob.md). It was written for an earlier pairing method (Just Works
+to the announced address over `MGMT_OP_PAIR_DEVICE`), which this pen refuses. The helper:
 
 - checks the polkit action `io.github.gonzalezerik.Px13Pen.pair-pen` against the *calling connection*
   before doing anything (active local sessions: yes; anything else: no);
@@ -85,8 +84,7 @@ over the Bluetooth management socket (`MGMT_OP_PAIR_DEVICE`, Just Works). The he
 - runs as root but with `CapabilityBoundingSet=CAP_NET_ADMIN` and the usual unit sandboxing,
   and cannot be reached except through the bus policy in `data/dbus/system.d/`.
 
-After a kernel-initiated bond the user's own `px13pend` marks the device `Trusted`; no process
-other than the pairing moment is privileged at all.
+Nothing calls it during touch-to-pair, so no process is privileged at any point of pairing.
 
 ## NixOS
 

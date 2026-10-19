@@ -21,12 +21,27 @@ need to know which protocol the pen speaks.
 
 A protocol is listed as supported only once it has been tested on real hardware.
 
-> **Status: research.** The protocol work (`docs/protocol/`, `findings/`) comes first.
-> Touch-to-pair is verified on the hardware: Microsoft's seamless-pairing protocol, run by
-> a Linux host with stock BlueZ, pairs the pen in about 0.7 s
-> ([findings/008](findings/008-linux-seamless-pairing.md)); `px13pend` runs that flow, and
-> `tools/capture/linux/06-seamless-pairing.py` runs it standalone.
-> Haptics, battery and buttons are in progress.
+> **Status: touch-to-pair works.** Bring the pen to the screen and `px13pend` pairs it in
+> under a second: no pairing button, no code to confirm, nothing to configure. That matches
+> Windows step for step and in speed (about 0.7 s from touch to bonded on Linux, 0.6 s on
+> Windows). It runs Microsoft's published seamless-pairing protocol on stock BlueZ and a stock
+> kernel, for a pen that already knows the laptop and for one that has never seen it
+> ([findings/008](findings/008-linux-seamless-pairing.md),
+> [how it works](docs/protocol/seamless-pairing.md)).
+>
+> **How Linux differs from Windows: the pairing key.** Both hand the pen a 128-bit key through
+> the digitizer. Windows then pairs *out-of-band* with that random key, so it never crosses the
+> radio. Linux can't yet: the pen only does LE *legacy* pairing, and the kernel implements
+> out-of-band keys only for LE Secure Connections (BlueZ documents the legacy case as
+> unsupported). Linux therefore pairs with passkey entry, and since the pen has no keypad it
+> always enters **0**, so the host sends a key of zeros and enters 0 too. The user sees no
+> difference, but that one pairing moment is weaker: someone recording the radio right then
+> could work out the link key, which Windows' random key prevents. Later connections are
+> unaffected. The kernel change that would close this gap is described in
+> [docs/future/kernel-le-legacy-oob.md](docs/future/kernel-le-legacy-oob.md); with it the
+> daemon would send a random key and pair exactly as Windows does.
+>
+> Haptics, battery and the Bluetooth buttons are in progress.
 
 ## Platforms
 
@@ -129,9 +144,9 @@ px13pen-settings              # settings window (GTK 4; needs a running px13pend
 The daemon needs read/write access to the digitizer's `/dev/hidraw*` node and the system
 D-Bus (BlueZ). Installing the package — `make install`, the flake, or the NixOS module — is
 the whole setup: a generated uaccess rule hands the signed-in user the pen-related nodes,
-`px13pend` starts with the graphical session (a systemd user preset the packaging applies), and
-the pairing helper is activated by the system bus on demand. A new pen pairs as soon as it
-comes near the screen, with a desktop notification.
+and `px13pend` starts with the graphical session (a systemd user preset the packaging applies).
+Pairing needs no privilege and no prompt: a new pen pairs as soon as it comes near the screen,
+with a desktop notification the moment it is bonded.
 See [docs/packaging.md](docs/packaging.md). In a container:
 
 ```sh

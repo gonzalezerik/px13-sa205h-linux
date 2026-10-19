@@ -2,7 +2,8 @@
 
 Date: 2026-10-18. Hardware: ASUS ProArt PX13 (HN7306), ELAN9008 digitizer `04F3:4631`, ASUS Pen
 3.0 SA205H, MediaTek Bluetooth controller, BlueZ 5.87, Linux 7.2. All runs on the target laptop
-with the package installed (uaccess rule, user daemon, pairing helper). Pen addresses are written
+with the package installed (uaccess rule, user daemon). §1–§9 are runs of the standalone
+reference script; §10 is the daemon. Pen addresses are written
 by role, never by value:
 
 - **announced address**: what input report `0x6E` carries;
@@ -18,7 +19,8 @@ protocol. A Linux host can run it with stock BlueZ and a stock kernel: register 
 digitizer, hand over a pairing key when the pen is announced, catch the pen's advertisement, and
 pair. Both cases work — a pen that already knows this host, and a pen meeting a host it has never
 paired with (tested with a second host identity) — in about 0.7 s from touch to bonded, the same as
-the Windows measurement (findings/006 §2).
+the Windows measurement (findings/006 §2). The daemon now does it on its own, including from a
+pen picked up cold (§10).
 
 The one gap to Windows: the pairing step itself. Windows pairs out-of-band with the 128-bit key it
 sent through the digitizer. The Linux kernel has no LE legacy out-of-band support, so the host pairs
@@ -154,3 +156,39 @@ afterwards and the test bond removed. This is the path a new pen takes on a fres
 `tools/capture/linux/06-seamless-pairing.py` runs §3–§5 end to end against the installed package and
 records btmon, the bluetoothctl session and a timestamped log. `SEAMLESS_HOST`/`SEAMLESS_HOST_TYPE`
 repeat §8.
+
+## 10. The daemon pairs by touch (2026-10-18/19)
+
+`px13pend serve` runs the flow of §3–§5 by itself (`crates/px13pend/src/pairing.rs`): host
+registered when the digitizer opens, LE scan started when the digitizer reports a pen in range,
+key report on each announcement, pairing through the daemon's own KeyboardOnly agent (passkey 0),
+`Trusted` set, notification on success. Runs on the target laptop, no other scanner running
+unless stated, pen holding a pairing for this host (flag `0x03`) and the host holding none:
+
+| Run | Pen state before the touch | Result |
+|---|---|---|
+| A | awake | failed: the pen advertised 9 ms after the scan started, the daemon removed that fresh device as a leftover before sending the key, no second advertisement |
+| B | picked up away from the screen | failed the same way: wake-up advertisement 4.4 s before the announcement, device removed, key not answered |
+| C | awake, a second scanner running | **bonded**, 0.65 s after the key, first touch (fixed daemon from here on) |
+| D | link just dropped, reconnect advertising | **bonded**, 0.64 s after the key, first touch |
+| E | touched 18 s after its link was dropped | failed: no advertisement at all (back-off, §7) |
+| F | **untouched for 18 minutes, nothing else scanning** | **bonded**, 0.70 s after the key, first touch |
+
+The fix between B and C follows from the wake-up advertisement (§7): a pen that holds a pairing
+for this host advertises as soon as it wakes, before the digitizer announces it. The daemon now
+pairs a pen-like device BlueZ has just seen instead of removing it; `Device1.Pair` on a known
+device makes the controller wait for the pen's next advertisement in hardware, and the pen's
+answer to the key (20 ms after it in C) lands there. No pairing prompt reached the desktop's
+agent in any run after the fix.
+
+Compared with Windows (findings/006 §2: about 0.6 s from touch to bonded, no user step besides
+the touch), Linux now matches it in speed and in what the user does. **The pairing method does
+not match.** Windows pairs out-of-band: the random 128-bit key it writes into `0x6F` becomes the
+temporary key and never crosses the radio. The daemon writes zeros and pairs with passkey entry
+and passkey 0, because the kernel has no LE legacy out-of-band path and the pen is legacy-only
+(§6). The pen accepts both as MITM-protected, but with a fixed temporary key a passive
+eavesdropper who records that one pairing could derive the link key; with Windows' key it could
+not. Bonds made afterwards are used the same way on both systems. Closing the gap needs the
+kernel change in `docs/future/kernel-le-legacy-oob.md`. Separately, the first touch after a
+failed attempt can still fall into the pen's back-off. Not yet
+run through the daemon: the brand-new-pen case (flag `0x01`), proven with the script in §8.

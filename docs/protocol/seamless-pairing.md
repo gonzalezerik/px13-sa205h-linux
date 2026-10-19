@@ -1,8 +1,10 @@
 # Seamless pairing — ELAN digitizer ↔ MPP haptic pen over Bluetooth
 
-Status: **VERIFIED-HW on Linux** (2026-10-18): touch-to-pair works on the ASUS ProArt PX13 with the
-ASUS Pen 3.0 SA205H, stock BlueZ and a stock kernel, for a pen that already knows the host and for
-a host the pen has never paired with. Evidence and the full test record: `findings/008`. Earlier
+Status: **VERIFIED-HW on Linux** (2026-10-18/19): touch-to-pair works on the ASUS ProArt PX13 with
+the ASUS Pen 3.0 SA205H, stock BlueZ and a stock kernel, for a pen that already knows the host and
+for a host the pen has never paired with. The daemon (`px13pend`) does it on its own, from a cold
+pen, in about 0.7 s from the announcement to bonded, as fast as Windows and with the same single
+step for the user (findings/008 §10). Evidence and the full test record: `findings/008`. Earlier
 Windows captures: `findings/006` §2–3. Confidence labels per CONTRIBUTING.md §5.
 
 The mechanism is Microsoft's published **Seamless Pairing for Windows Pens Implementation Guide**

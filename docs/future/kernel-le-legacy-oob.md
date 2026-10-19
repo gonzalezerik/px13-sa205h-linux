@@ -11,7 +11,7 @@ out-of-band with that key. The key never crosses the radio, so recording the pai
 eavesdropper nothing.
 
 Linux pairs the same pen with passkey entry and passkey 0 instead (docs/protocol/seamless-pairing.md
-§5). The pen accepts that as an authenticated pairing, but the temporary key is public: someone who
+§3). The pen accepts that as an authenticated pairing, but the temporary key is public: someone who
 records the radio during that one pairing second can derive the link key afterwards (legacy pairing
 offers no protection against a passive eavesdropper unless the out-of-band method is used). Bonds
 are only made once per pen and host, so the exposure is that one moment, but it is a real gap.

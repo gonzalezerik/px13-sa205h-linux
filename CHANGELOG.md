@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **Seamless pairing works end to end.** Touching the pen to the screen pairs it in under a
+  second through `px13pend`, with no button, code or configuration: the same single step and
+  about the same time as on Windows (findings/008 §10). A pen that wakes up advertising for a
+  pairing it still holds is now paired directly instead of being dropped as a leftover, which
+  made cold pickups fail. Unlike Windows, which pairs out-of-band with the random key it sends
+  through the digitizer, Linux pairs with passkey entry and passkey 0, because the kernel has
+  no LE legacy out-of-band support; the pairing moment is therefore not protected against an
+  eavesdropper (docs/future/kernel-le-legacy-oob.md).
 - `px13pend` pairs by touch the way the hardware runs proved: it registers the host with the
   digitizer, scans while a pen is in range, answers each announcement with the key report and
   pairs the pen's advertisement through its own KeyboardOnly agent (passkey 0), so no desktop

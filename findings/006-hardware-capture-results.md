@@ -169,7 +169,7 @@ press-and-hold ring does render, sweeping ≈0.6–1.0 s and closing just before
 
 ## 7. Consequences for the build (feeds docs/parity.md)
 
-1. **Tap-to-pair is implementable on Linux today**: watch the `0xFFF4` collection's report `0x6E`
+1. **[superseded by findings/008]** **Tap-to-pair is implementable on Linux today**: watch the `0xFFF4` collection's report `0x6E`
    on `hidraw` (it fires unarmed, on bare Linux), take the 6-byte LE address, call
    `org.bluez.Adapter1.ConnectDevice` with `AddressType "random"`, then `Pair`. The first Linux
    bonding run doubles as the test of the open `0x6F`/OOB question: plain Just Works either bonds
