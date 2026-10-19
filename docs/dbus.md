@@ -139,7 +139,7 @@ whether a report was actually written to the pen; suppression is not an error.
 |---|---|---|---|
 | `PlayEffect` | `s name, y intensity, y repeat, q cutoff_ms, q retrigger_ms` | `b played` | play a waveform by name (case-insensitive, one of the capability list). Unknown name → `org.freedesktop.DBus.Error.InvalidArgs`. |
 | `PlayOrdinal` | `q ordinal, y intensity, y repeat, q cutoff_ms, q retrigger_ms` | `b played` | same, by ordinal (the number in the capability tuple). |
-| `Stop` | — | `b played` | the stop command (ordinal 2). Behaviour on the first supported pen is unconfirmed (docs/protocol/haptics.md; findings/006 §7.2) — the pen also stops playing by itself. |
+| `Stop` | — | `b played` | the stop command. The spec's ordinal 2 is inert on the first supported pen, so this writes ordinal 1 (`none`), which cuts active playback and disarms the pen until the next write (findings/009 §3). |
 
 Argument semantics (the wire form is the 7-byte output report of
 docs/protocol/haptics.md §2):

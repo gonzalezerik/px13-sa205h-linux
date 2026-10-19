@@ -16,11 +16,14 @@ pub const OUTPUT_REPORT_ID: u8 = 0x41;
 /// Total length including the report-id byte.
 pub const OUTPUT_REPORT_BYTES: usize = 7;
 
-/// Implicit ordinal 1: no-op, must not disturb ongoing playback.
+/// Implicit ordinal 1: no-op per the spec — but on the first supported
+/// pen it is the real stop: it cuts an active texture and disarms the
+/// pen until the next write (findings/009 §3).
 pub const ORDINAL_NONE: u8 = 1;
 
-/// Implicit ordinal 2: stop = "play Stop" (§2.2). Not yet exercised on
-/// this pen (findings/006 §4 open item).
+/// Implicit ordinal 2: stop = "play Stop" per the spec (§2.2) — but
+/// the first supported pen ignores it (findings/009 §3); write
+/// `ORDINAL_NONE` to stop.
 pub const ORDINAL_STOP: u8 = 2;
 
 /// The intensity byte for full strength; the registry slider 1.0 maps
@@ -212,6 +215,16 @@ mod tests {
         // such (findings/006 §4).
         let report = Effect::of(3).to_output_report();
         assert_eq!(report, [0x41, 0x01, 0xFF, 0x03, 0x00, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn the_none_ordinal_is_the_stop_byte() {
+        // Ordinal 2 is inert on this pen; ordinal 1 is what the daemon
+        // writes to stop (findings/009 §3).
+        assert_eq!(
+            Effect::of(ORDINAL_NONE).to_output_report(),
+            [0x41, 0x01, 0xFF, 0x01, 0x00, 0x00, 0x00]
+        );
     }
 
     #[test]

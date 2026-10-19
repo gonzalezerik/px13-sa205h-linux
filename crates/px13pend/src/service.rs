@@ -1145,10 +1145,11 @@ impl Haptics {
             .await
     }
 
-    /// The stop command (implicit ordinal 2). Behaviour on the first
-    /// supported pen is unconfirmed (docs/protocol/haptics.md).
+    /// The stop command. The spec's implicit Stop ordinal 2 is inert
+    /// on the first supported pen; the None ordinal 1 is what actually
+    /// cuts playback and disarms (findings/009 §3).
     async fn stop(&self) -> fdo::Result<bool> {
-        self.write_policy(Effect::of(ORDINAL_STOP)).await
+        self.write_policy(Effect::of(ORDINAL_NONE)).await
     }
 }
 

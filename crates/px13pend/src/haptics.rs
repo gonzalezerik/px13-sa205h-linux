@@ -180,8 +180,12 @@ pub(crate) fn send_to_pen(path: Option<&str>, report: &[u8]) -> Result<(), Strin
 /// The SA205H effect table plus the two implicit ordinals.
 fn print_table() {
     println!("ordinal  effect    waveform  duration  class");
-    println!("      1  none      —         —         no-op");
-    println!("      2  stop      —         —         stop playback (unconfirmed on this pen)");
+    println!(
+        "      1  none      —         —         no-op; the real stop on the first supported pen"
+    );
+    println!(
+        "      2  stop      —         —         inert on the first supported pen (findings/009)"
+    );
     for wave in haptics::SA205H_WAVES {
         let class = if wave.continuous() {
             "continuous (felt while the tip touches)"
