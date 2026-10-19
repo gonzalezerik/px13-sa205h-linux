@@ -42,7 +42,7 @@ One compact line:
 | `paired` | bool | `Pen1.Paired` |
 | `trusted` | bool | `Pen1.Trusted` |
 | `battery` | number or null | `Pen1.BatteryPercent`; `null` until the first reading (the wire's `-1`) |
-| `haptics` | object or null | `{"enabled": bool, "intensity": 0–100}`, or `null` when the pen does no haptics |
+| `haptics` | object or null | `{"enabled": bool, "intensity": 0–100, "while_inking": bool, "while_interacting": bool, "ink_texture": string}`, or `null` when the pen does no haptics |
 | `capabilities` | object or null | `Pen1.Capabilities` projected to JSON; `null` only when the read failed |
 
 Capability keys follow docs/dbus.md §6 — a key that is absent means the
@@ -105,7 +105,7 @@ connection — restart it to follow a restarted `px13pend`.
 A pen object in full (address redacted):
 
 ```json
-{"type":"pen.changed","pen":{"path":"/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05","name":"SA205H","address":"XX:XX:XX:XX:XX:XX","present":true,"paired":true,"trusted":true,"battery":87,"haptics":{"enabled":true,"intensity":100},"capabilities":{"pairing":"seamless-touch","battery":"ble-battery-service","buttons":{"barrel":true,"shortcut":true,"shortcut_gestures":["single","double","long"]},"haptics":{"waveforms":[{"ordinal":3,"name":"click","duration_ms":45,"continuous":false}]}}}}
+{"type":"pen.changed","pen":{"path":"/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05","name":"SA205H","address":"XX:XX:XX:XX:XX:XX","present":true,"paired":true,"trusted":true,"battery":87,"haptics":{"enabled":true,"intensity":100,"while_inking":true,"while_interacting":true,"ink_texture":"ink"},"capabilities":{"pairing":"seamless-touch","battery":"ble-battery-service","buttons":{"barrel":true,"shortcut":true,"shortcut_gestures":["single","double","long"]},"haptics":{"waveforms":[{"ordinal":3,"name":"click","duration_ms":45,"continuous":false}]}}}}
 ```
 
 ## Exit codes

@@ -124,6 +124,23 @@ impl Client {
             .await
     }
 
+    /// Write `Haptics1.WhileInking`.
+    pub async fn set_while_inking(&self, path: &str, on: bool) -> Result<(), String> {
+        self.set_haptics_property(path, "WhileInking", on).await
+    }
+
+    /// Write `Haptics1.WhileInteracting`.
+    pub async fn set_while_interacting(&self, path: &str, on: bool) -> Result<(), String> {
+        self.set_haptics_property(path, "WhileInteracting", on)
+            .await
+    }
+
+    /// Write `Haptics1.InkTexture`; the daemon rejects names it does
+    /// not know and says which ones it does.
+    pub async fn set_ink_texture(&self, path: &str, texture: &str) -> Result<(), String> {
+        self.set_haptics_property(path, "InkTexture", texture).await
+    }
+
     async fn set_haptics_property<T>(&self, path: &str, name: &str, value: T) -> Result<(), String>
     where
         T: serde::Serialize + zbus::zvariant::Type,
@@ -232,7 +249,19 @@ async fn read_haptics(connection: &Connection, path: &str) -> Option<Haptics> {
         .ok()?;
     let enabled = haptics.get_property::<bool>("Enabled").await.ok()?;
     let intensity = haptics.get_property::<u8>("Intensity").await.ok()?;
-    Some(Haptics { enabled, intensity })
+    let while_inking = haptics.get_property::<bool>("WhileInking").await.ok()?;
+    let while_interacting = haptics
+        .get_property::<bool>("WhileInteracting")
+        .await
+        .ok()?;
+    let ink_texture = haptics.get_property::<String>("InkTexture").await.ok()?;
+    Some(Haptics {
+        enabled,
+        intensity,
+        while_inking,
+        while_interacting,
+        ink_texture,
+    })
 }
 
 /// Turn one daemon signal into at most one event. `PenAdded` and

@@ -32,7 +32,13 @@ struct PenCard {
     pen: Pen,
     group: adw::PreferencesGroup,
     haptics_switch: Option<adw::SwitchRow>,
+    intensity_row: Option<adw::ActionRow>,
     intensity: Option<gtk::Scale>,
+    while_inking: Option<adw::SwitchRow>,
+    while_interacting: Option<adw::SwitchRow>,
+    ink_texture: Option<adw::ComboRow>,
+    /// The combo's texture names in order, so a selection maps back to a name.
+    textures: Vec<String>,
     /// The slider's latest value, not yet sent. Flushed by the poll.
     pending: Rc<RefCell<Option<u8>>>,
 }
@@ -43,60 +49,135 @@ impl PenCard {
             .title(pen.name.clone())
             .build();
         group.set_description(Some(&describe(&pen)));
+        let haptics = pen.haptics.clone();
+        let on = haptics.as_ref().is_some_and(|h| h.enabled);
 
-        let haptics_switch = pen.haptics.as_ref().map(|haptics| {
-            let row = adw::SwitchRow::builder()
-                .title("Haptic feedback")
-                .active(haptics.enabled)
-                .build();
-            let bus = bus.clone();
-            let path = pen.path.clone();
-            let syncing = Rc::clone(syncing);
-            row.connect_active_notify(move |row| {
-                if syncing.get() {
-                    return;
-                }
-                bus.send(Command::SetHapticsEnabled {
-                    path: path.clone(),
-                    enabled: row.is_active(),
-                });
-            });
+        // Row order mirrors the gating: the master switch first, then
+        // what it gates — strength, the two waveform classes, and the
+        // texture the inking class plays.
+        let haptics_switch = haptics.as_ref().map(|haptics| {
+            let row = toggle_row(
+                "Haptic feedback",
+                None,
+                haptics.enabled,
+                true,
+                bus,
+                &pen.path,
+                syncing,
+                |path, enabled| Command::SetHapticsEnabled { path, enabled },
+            );
+            group.add(&row);
             row
         });
 
         let pending = Rc::new(RefCell::new(None));
-        let intensity = pen.haptics.as_ref().map(|haptics| {
-            let scale = gtk::Scale::builder().draw_value(true).build();
-            scale.set_range(0.0, 100.0);
-            scale.set_increments(5.0, 10.0);
-            scale.set_digits(0);
-            scale.set_value(f64::from(haptics.intensity));
-            scale.set_hexpand(true);
-            scale.update_property(&[gtk::accessible::Property::Label("Haptic intensity")]);
-            let row = adw::ActionRow::builder()
-                .title("Intensity")
-                .child(&scale)
-                .build();
-            let syncing = Rc::clone(syncing);
-            let pending = Rc::clone(&pending);
-            scale.connect_value_changed(move |scale| {
-                if syncing.get() {
-                    return;
-                }
-                *pending.borrow_mut() = Some(clamp_intensity(scale.value()));
-            });
+        let (intensity_row, intensity) = match haptics.as_ref() {
+            Some(haptics) => {
+                let scale = gtk::Scale::builder().draw_value(true).build();
+                scale.set_range(0.0, 100.0);
+                scale.set_increments(5.0, 10.0);
+                scale.set_digits(0);
+                scale.set_value(f64::from(haptics.intensity));
+                scale.set_hexpand(true);
+                scale.update_property(&[gtk::accessible::Property::Label("Haptic intensity")]);
+                let row = adw::ActionRow::builder()
+                    .title("Intensity")
+                    .child(&scale)
+                    .sensitive(on)
+                    .build();
+                let syncing = Rc::clone(syncing);
+                let pending = Rc::clone(&pending);
+                scale.connect_value_changed(move |scale| {
+                    if syncing.get() {
+                        return;
+                    }
+                    *pending.borrow_mut() = Some(clamp_intensity(scale.value()));
+                });
+                group.add(&row);
+                (Some(row), Some(scale))
+            }
+            None => (None, None),
+        };
+
+        let while_inking = haptics.as_ref().map(|haptics| {
+            let row = toggle_row(
+                "While inking",
+                Some("A texture plays while the tip touches the screen"),
+                haptics.while_inking,
+                on,
+                bus,
+                &pen.path,
+                syncing,
+                |path, on| Command::SetWhileInking { path, on },
+            );
             group.add(&row);
-            scale
+            row
         });
-        if let Some(row) = &haptics_switch {
-            group.add(row);
-        }
+
+        let while_interacting = haptics.as_ref().map(|haptics| {
+            let row = toggle_row(
+                "While interacting",
+                Some("Short ticks for clicks, presses and hovers"),
+                haptics.while_interacting,
+                on,
+                bus,
+                &pen.path,
+                syncing,
+                |path, on| Command::SetWhileInteracting { path, on },
+            );
+            group.add(&row);
+            row
+        });
+
+        let textures = ink_textures(&pen);
+        let ink_texture = match (haptics.as_ref(), textures.is_empty()) {
+            (Some(haptics), false) => {
+                let names: Vec<&str> = textures.iter().map(String::as_str).collect();
+                let strings = gtk::StringList::new(&names);
+                let row = adw::ComboRow::builder()
+                    .title("Ink texture")
+                    .subtitle("The texture that plays while you write")
+                    .model(&strings)
+                    .sensitive(on && haptics.while_inking)
+                    .build();
+                if let Some(index) = textures
+                    .iter()
+                    .position(|name| *name == haptics.ink_texture)
+                {
+                    row.set_selected(index as u32);
+                }
+                let bus = bus.clone();
+                let path = pen.path.clone();
+                let syncing = Rc::clone(syncing);
+                let names = textures.clone();
+                row.connect_selected_notify(move |row| {
+                    if syncing.get() {
+                        return;
+                    }
+                    let index = usize::try_from(row.selected()).unwrap_or(usize::MAX);
+                    if let Some(texture) = names.get(index) {
+                        bus.send(Command::SetInkTexture {
+                            path: path.clone(),
+                            texture: texture.clone(),
+                        });
+                    }
+                });
+                group.add(&row);
+                Some(row)
+            }
+            _ => None,
+        };
 
         PenCard {
             pen,
             group,
             haptics_switch,
+            intensity_row,
             intensity,
+            while_inking,
+            while_interacting,
+            ink_texture,
+            textures,
             pending,
         }
     }
@@ -105,20 +186,40 @@ impl PenCard {
     fn apply(&mut self, pen: &Pen, syncing: &Cell<bool>) {
         self.pen = pen.clone();
         self.group.set_description(Some(&describe(pen)));
+        let haptics = pen.haptics.clone();
+        let on = haptics.as_ref().is_some_and(|h| h.enabled);
+        syncing.set(true);
         if let Some(row) = &self.haptics_switch {
-            syncing.set(true);
-            row.set_active(pen.haptics.as_ref().is_some_and(|h| h.enabled));
-            syncing.set(false);
+            row.set_active(on);
+        }
+        if let Some(row) = &self.intensity_row {
+            row.set_sensitive(on);
         }
         // While the user holds the slider, their value wins; it goes
         // out on the next flush and comes back as an ordinary change.
         if let Some(scale) = &self.intensity
             && self.pending.borrow().is_none()
         {
-            syncing.set(true);
-            scale.set_value(pen.haptics.as_ref().map_or(0.0, |h| f64::from(h.intensity)));
-            syncing.set(false);
+            scale.set_value(haptics.as_ref().map_or(0.0, |h| f64::from(h.intensity)));
         }
+        if let Some(row) = &self.while_inking {
+            row.set_active(haptics.as_ref().is_some_and(|h| h.while_inking));
+            row.set_sensitive(on);
+        }
+        if let Some(row) = &self.while_interacting {
+            row.set_active(haptics.as_ref().is_some_and(|h| h.while_interacting));
+            row.set_sensitive(on);
+        }
+        if let Some(row) = &self.ink_texture {
+            if let Some(index) = haptics
+                .as_ref()
+                .and_then(|h| self.textures.iter().position(|name| *name == h.ink_texture))
+            {
+                row.set_selected(index as u32);
+            }
+            row.set_sensitive(on && haptics.as_ref().is_some_and(|h| h.while_inking));
+        }
+        syncing.set(false);
     }
 
     /// Send the coalesced slider value, if the daemon does not have it.
@@ -368,6 +469,56 @@ fn toast(overlay: &adw::ToastOverlay, message: &str, timeout: u32) {
     );
 }
 
+/// A labelled switch that sends one command when toggled. The subtitle
+/// is the row's only explanation; keep it to one line.
+fn toggle_row(
+    title: &str,
+    subtitle: Option<&str>,
+    active: bool,
+    sensitive: bool,
+    bus: &BusHandle,
+    path: &str,
+    syncing: &Rc<Cell<bool>>,
+    command: fn(String, bool) -> Command,
+) -> adw::SwitchRow {
+    let row = adw::SwitchRow::builder()
+        .title(title)
+        .active(active)
+        .sensitive(sensitive)
+        .build();
+    if let Some(subtitle) = subtitle {
+        row.set_subtitle(subtitle);
+    }
+    let bus = bus.clone();
+    let path = path.to_string();
+    let syncing = Rc::clone(syncing);
+    row.connect_active_notify(move |row| {
+        if syncing.get() {
+            return;
+        }
+        bus.send(command(path.clone(), row.is_active()));
+    });
+    row
+}
+
+/// The textures the picker offers: the pen's own continuous waveforms
+/// (docs/dbus.md §6) minus the eraser, which the daemon arms by itself
+/// when the pen is inverted. No capability list, no picker.
+fn ink_textures(pen: &Pen) -> Vec<String> {
+    pen.capabilities
+        .as_ref()
+        .and_then(|caps| caps.haptics.as_ref())
+        .map(|haptics| {
+            haptics
+                .waveforms
+                .iter()
+                .filter(|wave| wave.continuous && wave.name != "eraser")
+                .map(|wave| wave.name.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The card's one-line state under the pen name.
 fn describe(pen: &Pen) -> String {
     let battery = match pen.battery {
@@ -406,6 +557,34 @@ fn clamp_intensity(value: f64) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use px13pen_client::{Capabilities, CapabilityHaptics, Waveform};
+
+    fn waveform(ordinal: u16, name: &str, continuous: bool) -> Waveform {
+        Waveform {
+            ordinal,
+            name: name.to_string(),
+            duration_ms: 0,
+            continuous,
+        }
+    }
+
+    #[test]
+    fn the_picker_offers_continuous_waveforms_without_the_eraser() {
+        let mut pen = sample_pen();
+        pen.capabilities = Some(Capabilities {
+            haptics: Some(CapabilityHaptics {
+                waveforms: vec![
+                    waveform(3, "click", false),
+                    waveform(9, "ink", true),
+                    waveform(14, "eraser", true),
+                    waveform(10, "pencil", true),
+                ],
+            }),
+            ..Default::default()
+        });
+        assert_eq!(ink_textures(&pen), ["ink", "pencil"]);
+        assert!(ink_textures(&sample_pen()).is_empty());
+    }
 
     fn sample_pen() -> Pen {
         Pen {

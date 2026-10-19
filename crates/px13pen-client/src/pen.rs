@@ -22,10 +22,18 @@ pub struct Pen {
 }
 
 /// The pen's `Haptics1` policy state; `None` when the pen does no haptics.
+/// The policy is per user, not per pen — every pen of the daemon reports
+/// the same values (docs/dbus.md §7).
 #[derive(Clone, Debug, Serialize)]
 pub struct Haptics {
     pub enabled: bool,
     pub intensity: u8,
+    /// The tip's contact arms the ink texture.
+    pub while_inking: bool,
+    /// Discrete effects (the UI ticks) get through.
+    pub while_interacting: bool,
+    /// Which continuous texture the tip arms.
+    pub ink_texture: String,
 }
 
 /// The capability dict projected to typed fields. A key absent from the

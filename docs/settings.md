@@ -16,9 +16,17 @@ $ px13pen-settings --system   # px13pend serve --system
 One card per connected pen: name, address, link state and battery. A
 card only grows haptics controls when the daemon exported a `Haptics1`
 interface for that pen — a pen that cannot do haptics never shows a
-switch that would do nothing. The haptics rows are the switch
-(`Haptics1.Enabled`) and an intensity slider (`Haptics1.Intensity`,
-0–100 %).
+switch that would do nothing. The haptics rows are the master switch
+(`Haptics1.Enabled`), an intensity slider (`Haptics1.Intensity`,
+0–100 %), a **While inking** switch (`Haptics1.WhileInking` — the tip's
+contact arms a texture while it touches the screen), a **While
+interacting** switch (`Haptics1.WhileInteracting` — short ticks for
+clicks, presses and hovers) and an **Ink texture** picker
+(`Haptics1.InkTexture` — the continuous waveforms the pen reports,
+minus the eraser, which the daemon arms by itself when the pen is
+inverted). Controls the current policy cannot use are greyed out:
+everything but the master switch while haptics are off, and the
+texture picker while *While inking* is off.
 
 Pairing needs no button: `px13pend` listens from the start and pairs a new
 pen as soon as it comes near the screen. `Search for pens` runs

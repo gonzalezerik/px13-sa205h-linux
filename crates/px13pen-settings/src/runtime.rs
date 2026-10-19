@@ -13,6 +13,9 @@ use px13pen_client::{Client, WatchEvent};
 pub enum Command {
     SetHapticsEnabled { path: String, enabled: bool },
     SetIntensity { path: String, intensity: u8 },
+    SetWhileInking { path: String, on: bool },
+    SetWhileInteracting { path: String, on: bool },
+    SetInkTexture { path: String, texture: String },
     StartPairing,
     StopPairing,
 }
@@ -99,6 +102,13 @@ async fn pump(client: &Client, commands: &Receiver<Command>, events: &Sender<UiE
             }
             Command::SetIntensity { path, intensity } => {
                 client.set_intensity(&path, intensity).await
+            }
+            Command::SetWhileInking { path, on } => client.set_while_inking(&path, on).await,
+            Command::SetWhileInteracting { path, on } => {
+                client.set_while_interacting(&path, on).await
+            }
+            Command::SetInkTexture { path, texture } => {
+                client.set_ink_texture(&path, &texture).await
             }
             Command::StartPairing => client.start_pairing().await.map(|_| ()),
             Command::StopPairing => client.stop_pairing().await.map(|_| ()),
