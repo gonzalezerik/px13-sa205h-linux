@@ -192,13 +192,29 @@ Full evidence, including the felt-impressions panel and per-test timelines:
 8. Not all buzz is host-commanded: the top-button press-and-hold buzz has **no host write** behind
    it (pen-local feedback — findings/006 §5).
 
+### 2.8 First live sends from Linux (2026-10-19) [VERIFIED-HW]
+
+Full evidence: `findings/009-first-linux-haptics.md`. Output reports written to the pen's
+`hidraw` node (kernel HID → uhid → BlueZ HID → GATT) were felt: the Linux transport works
+end to end. Two model corrections came out of it:
+
+1. **The implicit Stop ordinal 2 is inert on this firmware** — sent twice against an actively
+   playing continuous texture (with and without cutoff, tip in contact), it never cut the texture.
+   **The None ordinal 1 is the real stop**: it cuts an active texture mid-stroke and leaves later
+   contacts silent (disarms until the next write). §3 item 3 is amended accordingly.
+2. **One write of a continuous waveform stays armed across separate tip contacts** (texture
+   returned on a second touch with no new write, past the armed cutoff value) — the host arms once
+   per tool activation, not per stroke. The 25 % intensity byte was felt and clearly weaker
+   (§2.7 item 5's open perception question resolved at the low end).
+
 ## 3. What px13pend must reproduce (normative checklist)
 
 1. Read Waveform List + Duration List once per pen connection via **GET_FEATURE** (allowed:
    reads are non-destructive); build the ordinal↔waveform table. [DOC §1, STATIC §2.1]
 2. Play effects with a **single output report** setting all five usages (0x21/0x23/0x24/0x25/
    0x28) and one write; never write feature reports to the stylus collection. [STATIC §2.2/2.3]
-3. Stop = ordinal 2, intensity 1.0. [STATIC §2.2]
+3. Stop = ordinal 2 per the spec [STATIC §2.2] — **but this pen ignores ordinal 2; write
+   ordinal 1 (None) to stop/disarm [VERIFIED-HW §2.8.1]**.
 4. Fallback rules: interaction feedback → **Click** when the requested discrete waveform is
    absent; inking → **InkContinuous** when the tool waveform is absent. [DOC, STATIC §2.4]
 5. System-originated: hover-family → 0x1008, boundary/snap-family → 0x1012, pen fallback Click,
@@ -216,6 +232,7 @@ Full evidence, including the felt-impressions panel and per-test timelines:
 - Persistence location (§2.6) — session 4. [**resolved 2026-10-17** — §2.6 annotation,
   findings/006 §4]
 - Ordinal 2 (Stop) behaviour on this pen has not been exercised — the direct-send panel covered
-  3/7/8/9/11 and the continuous set. [open]
+  3/7/8/9/11 and the continuous set. [**resolved 2026-10-19** — ordinal 2 is inert, ordinal 1 is
+  the stop; §2.8.1, findings/009 §3]
 - Exact report IDs/sizes for the SA205H come from the captured descriptor
   (`fixtures/px13-hn7306/`), not from this doc.
