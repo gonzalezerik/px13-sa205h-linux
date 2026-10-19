@@ -107,6 +107,12 @@ collection's other vendor reports and the firmware-update collection stay untouc
   answers. It is being replaced by the flow above (register host at start, scan armed while a pen is
   in range, key on announcement, pair the advertiser through the daemon's own KeyboardOnly agent,
   notify on success). Until then, pair with the script or with button pairing mode.
+- **Use your own agent.** BlueZ sends pairing questions to the agent of the client that started
+  the pairing, and otherwise to the session's default agent — on a desktop that is usually the
+  shell's (KeyboardDisplay, with passkey and approve/deny popups, and requests rejected while
+  another is pending). A default agent silently turns the method into "host displays a random
+  passkey", which this pen cannot match. The pairing client must register its own KeyboardOnly
+  agent that answers the passkey request with 0, so touch-to-pair shows no prompt at all.
 
 ## 7. How the model got here
 
