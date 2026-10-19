@@ -73,7 +73,7 @@ pub fn ink_textures() -> Vec<&'static str> {
 
 /// Whether a (lower-case) name is a selectable ink texture.
 pub fn is_ink_texture(name: &str) -> bool {
-    ink_textures().iter().any(|texture| *texture == name)
+    ink_textures().contains(&name)
 }
 
 /// Where the file lives: `px13pen/haptics.conf` under

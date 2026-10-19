@@ -31,6 +31,7 @@ use px13pen_core::haptics::{
 };
 use px13pen_core::seamless;
 
+use crate::ink;
 use crate::settings::{self, HapticsSettings};
 use zbus::fdo::{self, ManagedObjects};
 use zbus::object_server::{InterfaceRef, SignalEmitter};
@@ -137,6 +138,7 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         scan_until: Mutex::new(None),
         register_due: AtomicBool::new(false),
         haptics: Arc::new(Mutex::new(settings::load())),
+        ink: Mutex::new(ink::Arming::default()),
     });
     state.register_host().await;
     connection
@@ -214,6 +216,15 @@ fn open_listener() -> Result<HidDevice, String> {
     Ok(device)
 }
 
+/// A pen about to be exported: object path, name, live values, and
+/// the shared policy its `Haptics1` interface reads.
+type PendingInstall = (
+    String,
+    String,
+    Arc<Mutex<PenValues>>,
+    Arc<Mutex<HapticsSettings>>,
+);
+
 /// Everything the interface objects share. The pen map, the pairing
 /// device and the announcement dedupe each live behind their own
 /// mutex, and no lock is ever held across an await.
@@ -238,6 +249,9 @@ struct State {
     /// The one haptics policy every pen shares, loaded from the user's
     /// config file at startup (docs/dbus.md §7).
     haptics: Arc<Mutex<HapticsSettings>>,
+    /// While-inking arming state, driven by the digitizer drain
+    /// (crates/px13pend/src/ink.rs).
+    ink: Mutex<ink::Arming>,
 }
 
 /// The listener's memory of one announced address.
@@ -355,9 +369,11 @@ struct Observation {
 
 impl State {
     /// Drain the digitizer: a pen coming into range arms the LE scan, an
-    /// announcement runs a seamless pairing. Every read is non-blocking; an
-    /// empty read ends the drain.
+    /// announcement runs a seamless pairing, and the pen's own contact
+    /// reports drive the while-inking arming. Every read is non-blocking;
+    /// an empty read ends the drain.
     async fn drain_announcements(&self, daemon: &InterfaceRef<Daemon>) -> Result<(), String> {
+        locked(&self.ink).start_tick();
         for _ in 0..DRAIN_LIMIT {
             let frame = {
                 let guard = locked(&self.listener);
@@ -370,6 +386,11 @@ impl State {
                     Ok(len) => frame[..len].to_vec(),
                 }
             };
+            let action = locked(&self.ink).on_frame(&frame, |tool| self.ordinal_for(tool));
+            if action != ink::Action::Nothing {
+                let ok = self.write_ink(&action);
+                locked(&self.ink).on_done(&action, ok);
+            }
             if pen_in_range(&frame) {
                 self.arm_scan().await;
                 continue;
@@ -380,6 +401,38 @@ impl State {
             self.on_announcement(daemon, &note).await?;
         }
         Ok(())
+    }
+
+    /// The ordinal the policy wants armed for a tool, or `None` when the
+    /// policy is closed for it: the tip arms the chosen texture, the
+    /// eraser end always arms the eraser texture (docs/dbus.md §7).
+    fn ordinal_for(&self, tool: ink::Tool) -> Option<u8> {
+        let settings = locked(&self.haptics);
+        let name = match tool {
+            ink::Tool::Tip => settings.ink_texture.as_str(),
+            ink::Tool::Eraser => "eraser",
+        };
+        let ordinal = resolve(name)?;
+        settings.plays(ordinal).then_some(ordinal)
+    }
+
+    /// Run one arming write and report whether it landed. An arm plays
+    /// the texture at the policy's strength; a disarm is the None
+    /// ordinal, which cuts playback and leaves nothing armed
+    /// (findings/009 §3).
+    fn write_ink(&self, action: &ink::Action) -> bool {
+        let effect = match action {
+            ink::Action::Arm { ordinal, .. } => {
+                let settings = locked(&self.haptics);
+                Effect {
+                    intensity: intensity_byte(settings.intensity),
+                    ..Effect::of(*ordinal)
+                }
+            }
+            ink::Action::Disarm => Effect::of(ORDINAL_NONE),
+            ink::Action::Nothing => return false,
+        };
+        crate::haptics::send_to_pen(None, &effect.to_output_report()).is_ok()
     }
 
     /// Start (or extend) the LE scan while a pen is in range and none is
@@ -566,12 +619,7 @@ impl State {
     async fn sync_pens(&self, daemon: &InterfaceRef<Daemon>, announce: bool) -> Result<(), String> {
         let observed = self.scan_pens().await?;
         let (installs, removals, updates) = {
-            let mut installs: Vec<(
-                String,
-                String,
-                Arc<Mutex<PenValues>>,
-                Arc<Mutex<HapticsSettings>>,
-            )> = Vec::new();
+            let mut installs: Vec<PendingInstall> = Vec::new();
             let mut updates: Vec<(String, Diff)> = Vec::new();
             let mut current = locked(&self.pens);
             let removals: Vec<String> = current

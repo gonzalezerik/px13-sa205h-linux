@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 
 mod buttons;
 mod haptics;
+mod ink;
 mod pairing;
 mod presence;
 mod service;
