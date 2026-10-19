@@ -122,11 +122,6 @@ impl Arming {
             Action::Nothing => {}
         }
     }
-
-    /// Whether a texture is armed right now (diagnostics and tests).
-    pub fn armed(&self) -> Option<(Tool, u8)> {
-        self.armed
-    }
 }
 
 #[cfg(test)]
@@ -164,7 +159,7 @@ mod tests {
     fn hovering_arms_nothing() {
         let mut arming = Arming::default();
         assert_eq!(tick(&mut arming, &[frame(HOVER)]), vec![Action::Nothing]);
-        assert_eq!(arming.armed(), None);
+        assert_eq!(arming.armed, None);
     }
 
     #[test]
@@ -204,7 +199,7 @@ mod tests {
         );
         assert_eq!(tick(&mut arming, &[frame(0x00)]), vec![Action::Disarm]);
         arming.on_done(&Action::Disarm, true);
-        assert_eq!(arming.armed(), None);
+        assert_eq!(arming.armed, None);
         assert_eq!(tick(&mut arming, &[frame(0x00)]), vec![Action::Nothing]);
     }
 
