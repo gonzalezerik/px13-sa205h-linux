@@ -51,6 +51,11 @@ impl PenCard {
         group.set_description(Some(&describe(&pen)));
         let haptics = pen.haptics.clone();
         let on = haptics.as_ref().is_some_and(|h| h.enabled);
+        let wire = ToggleWire {
+            bus,
+            path: &pen.path,
+            syncing,
+        };
 
         // Row order mirrors the gating: the master switch first, then
         // what it gates — strength, the two waveform classes, and the
@@ -61,9 +66,7 @@ impl PenCard {
                 None,
                 haptics.enabled,
                 true,
-                bus,
-                &pen.path,
-                syncing,
+                &wire,
                 |path, enabled| Command::SetHapticsEnabled { path, enabled },
             );
             group.add(&row);
@@ -105,9 +108,7 @@ impl PenCard {
                 Some("A texture plays while the tip touches the screen"),
                 haptics.while_inking,
                 on,
-                bus,
-                &pen.path,
-                syncing,
+                &wire,
                 |path, on| Command::SetWhileInking { path, on },
             );
             group.add(&row);
@@ -120,9 +121,7 @@ impl PenCard {
                 Some("Short ticks for clicks, presses and hovers"),
                 haptics.while_interacting,
                 on,
-                bus,
-                &pen.path,
-                syncing,
+                &wire,
                 |path, on| Command::SetWhileInteracting { path, on },
             );
             group.add(&row);
@@ -326,36 +325,38 @@ pub fn build(app: &adw::Application, system: bool) -> adw::ApplicationWindow {
         move || {
             while let Ok(event) = events.try_recv() {
                 match event {
-                    UiEvent::Watch(WatchEvent::Snapshot { pens }) => {
-                        let mut cards = cards.borrow_mut();
-                        for card in cards.values() {
-                            page.remove(&card.group);
+                    UiEvent::Watch(watch) => match *watch {
+                        WatchEvent::Snapshot { pens } => {
+                            let mut cards = cards.borrow_mut();
+                            for card in cards.values() {
+                                page.remove(&card.group);
+                            }
+                            cards.clear();
+                            for pen in pens {
+                                add_pen(&page, &mut cards, pen, &bus, &syncing);
+                            }
                         }
-                        cards.clear();
-                        for pen in pens {
-                            add_pen(&page, &mut cards, pen, &bus, &syncing);
+                        WatchEvent::Added { pen } => {
+                            let mut cards = cards.borrow_mut();
+                            if !cards.contains_key(&pen.path) {
+                                add_pen(&page, &mut cards, pen, &bus, &syncing);
+                            }
                         }
-                    }
-                    UiEvent::Watch(WatchEvent::Added { pen }) => {
-                        let mut cards = cards.borrow_mut();
-                        if !cards.contains_key(&pen.path) {
-                            add_pen(&page, &mut cards, pen, &bus, &syncing);
+                        WatchEvent::Removed { path, .. } => {
+                            if let Some(card) = cards.borrow_mut().remove(&path) {
+                                page.remove(&card.group);
+                            }
                         }
-                    }
-                    UiEvent::Watch(WatchEvent::Removed { path, .. }) => {
-                        if let Some(card) = cards.borrow_mut().remove(&path) {
-                            page.remove(&card.group);
+                        WatchEvent::Changed { pen } => {
+                            refresh_pen(&page, &mut cards.borrow_mut(), pen, &bus, &syncing)
                         }
-                    }
-                    UiEvent::Watch(WatchEvent::Changed { pen }) => {
-                        refresh_pen(&page, &mut cards.borrow_mut(), pen, &bus, &syncing)
-                    }
-                    UiEvent::Watch(WatchEvent::Pairing { kind, detail }) => {
-                        if kind == "bonded" || kind == "failed" {
-                            pairing.borrow_mut().active = false;
+                        WatchEvent::Pairing { kind, detail } => {
+                            if kind == "bonded" || kind == "failed" {
+                                pairing.borrow_mut().active = false;
+                            }
+                            toast(&toasts, &pairing_message(&kind, &detail), 5);
                         }
-                        toast(&toasts, &pairing_message(&kind, &detail), 5);
-                    }
+                    },
                     UiEvent::Failure(message) => toast(&toasts, &message, 5),
                     // Stay open, stay stale, say so — and keep the
                     // toast until the user has read it.
@@ -469,6 +470,15 @@ fn toast(overlay: &adw::ToastOverlay, message: &str, timeout: u32) {
     );
 }
 
+/// The wiring every toggle shares: where commands go, which pen they
+/// name, and the guard that keeps programmatic updates from echoing
+/// back as user edits.
+struct ToggleWire<'a> {
+    bus: &'a BusHandle,
+    path: &'a str,
+    syncing: &'a Rc<Cell<bool>>,
+}
+
 /// A labelled switch that sends one command when toggled. The subtitle
 /// is the row's only explanation; keep it to one line.
 fn toggle_row(
@@ -476,9 +486,7 @@ fn toggle_row(
     subtitle: Option<&str>,
     active: bool,
     sensitive: bool,
-    bus: &BusHandle,
-    path: &str,
-    syncing: &Rc<Cell<bool>>,
+    wire: &ToggleWire<'_>,
     command: fn(String, bool) -> Command,
 ) -> adw::SwitchRow {
     let row = adw::SwitchRow::builder()
@@ -489,9 +497,9 @@ fn toggle_row(
     if let Some(subtitle) = subtitle {
         row.set_subtitle(subtitle);
     }
-    let bus = bus.clone();
-    let path = path.to_string();
-    let syncing = Rc::clone(syncing);
+    let bus = wire.bus.clone();
+    let path = wire.path.to_string();
+    let syncing = Rc::clone(wire.syncing);
     row.connect_active_notify(move |row| {
         if syncing.get() {
             return;

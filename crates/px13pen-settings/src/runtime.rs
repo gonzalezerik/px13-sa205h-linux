@@ -25,7 +25,9 @@ pub enum Command {
 #[derive(Debug)]
 pub enum UiEvent {
     /// A daemon event, passed through unchanged from `px13pen-client`.
-    Watch(WatchEvent),
+    /// Boxed: a full pen snapshot inside the enum would make every
+    /// event as big as the biggest pen list.
+    Watch(Box<WatchEvent>),
     /// A command failed; the window shows the message and waits for
     /// the daemon's own state to settle.
     Failure(String),
@@ -76,7 +78,7 @@ async fn run(system: bool, commands: Receiver<Command>, events: Sender<UiEvent>)
         }
     };
     let follow = client.follow(false, |event| {
-        let _ = events.try_send(UiEvent::Watch(event));
+        let _ = events.try_send(UiEvent::Watch(Box::new(event)));
     });
     let pump = pump(&client, &commands, &events);
     match select(Box::pin(follow), Box::pin(pump)).await {
