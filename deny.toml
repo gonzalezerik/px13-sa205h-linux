@@ -13,6 +13,9 @@ db-urls = ["https://github.com/RustSec/advisory-db"]
 allow = [
     "AGPL-3.0-or-later",
     "Apache-2.0",
+    # Apache-2.0 plus an extra permission (target-lexicon, a build-time
+    # dependency of the GTK -sys crates).
+    "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",

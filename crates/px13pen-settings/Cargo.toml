@@ -13,7 +13,7 @@ async-channel = "2"
 futures-util = "0.3"
 gtk4 = { version = "0.9.7", features = ["v4_12"] }
 libadwaita = { version = "0.7.2", features = ["v1_5"] }
-px13pen-client = { path = "../px13pen-client" }
+px13pen-client = { path = "../px13pen-client", version = "0.0.1" }
 
 [lints]
 workspace = true

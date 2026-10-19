@@ -9,7 +9,7 @@ repository.workspace = true
 description = "Command-line client for px13pend"
 
 [dependencies]
-px13pen-client = { path = "../px13pen-client" }
+px13pen-client = { path = "../px13pen-client", version = "0.0.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
