@@ -22,6 +22,7 @@ mod haptics;
 mod pairing;
 mod presence;
 mod service;
+mod settings;
 
 use hidapi::{DeviceInfo, HidApi};
 use px13pen_core::seamless;

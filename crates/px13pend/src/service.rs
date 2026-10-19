@@ -14,9 +14,11 @@
 //! Pen state lives behind one `Arc<Mutex<PenValues>>` per pen, shared
 //! by the `Pen1` and `Haptics1` interface objects, so the haptics
 //! methods see exactly the `Present` flag the sync task maintains.
-//! Getters lock, clone and release; change signals are emitted only
-//! with the lock dropped, because emitting reads the property back
-//! through the same getter.
+//! The haptics policy is not per pen: one shared `HapticsSettings`
+//! (crates/px13pend/src/settings.rs) backs every pen's toggles, like
+//! the registry values it mirrors. Getters lock, clone and release;
+//! change signals are emitted only with the lock dropped, because
+//! emitting reads the property back through the same getter.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,6 +30,8 @@ use px13pen_core::haptics::{
     Effect, ORDINAL_NONE, ORDINAL_STOP, SA205H_WAVES, intensity_byte, resolve,
 };
 use px13pen_core::seamless;
+
+use crate::settings::{self, HapticsSettings};
 use zbus::fdo::{self, ManagedObjects};
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 use zbus::wire::{ObjectPath, OwnedObjectPath, OwnedVariant, Variant};
@@ -132,6 +136,7 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         agent,
         scan_until: Mutex::new(None),
         register_due: AtomicBool::new(false),
+        haptics: Arc::new(Mutex::new(settings::load())),
     });
     state.register_host().await;
     connection
@@ -230,6 +235,9 @@ struct State {
     scan_until: Mutex<Option<Instant>>,
     /// Set when the host must be registered with the digitizer again.
     register_due: AtomicBool,
+    /// The one haptics policy every pen shares, loaded from the user's
+    /// config file at startup (docs/dbus.md §7).
+    haptics: Arc<Mutex<HapticsSettings>>,
 }
 
 /// The listener's memory of one announced address.
@@ -247,7 +255,9 @@ struct PenEntry {
     caps_shape: (bool, bool),
 }
 
-/// The mutable per-pen state behind `Pen1` and `Haptics1`.
+/// The mutable per-pen state behind `Pen1` and `Haptics1`. The
+/// haptics policy is not here — it is the shared `HapticsSettings`,
+/// host-only and never written to the pen (§7).
 struct PenValues {
     name: String,
     address: String,
@@ -255,14 +265,11 @@ struct PenValues {
     paired: bool,
     trusted: bool,
     battery: i32,
-    enabled: bool,
-    intensity: u8,
     capabilities: BTreeMap<String, OwnedVariant>,
 }
 
 impl PenValues {
-    /// Fresh values for a first sighting; the haptics policy defaults
-    /// are on/100 and host-only, never written to the pen (§7).
+    /// Fresh values for a first sighting.
     fn new(observed: &Observation, capabilities: BTreeMap<String, OwnedVariant>) -> Self {
         PenValues {
             name: observed.name.clone(),
@@ -271,8 +278,6 @@ impl PenValues {
             paired: observed.paired,
             trusted: observed.trusted,
             battery: observed.battery.map(i32::from).unwrap_or(BATTERY_UNKNOWN),
-            enabled: true,
-            intensity: 100,
             capabilities,
         }
     }
@@ -561,7 +566,12 @@ impl State {
     async fn sync_pens(&self, daemon: &InterfaceRef<Daemon>, announce: bool) -> Result<(), String> {
         let observed = self.scan_pens().await?;
         let (installs, removals, updates) = {
-            let mut installs: Vec<(String, String, Arc<Mutex<PenValues>>)> = Vec::new();
+            let mut installs: Vec<(
+                String,
+                String,
+                Arc<Mutex<PenValues>>,
+                Arc<Mutex<HapticsSettings>>,
+            )> = Vec::new();
             let mut updates: Vec<(String, Diff)> = Vec::new();
             let mut current = locked(&self.pens);
             let removals: Vec<String> = current
@@ -594,6 +604,7 @@ impl State {
                         px13pend_path.clone(),
                         observation.name.clone(),
                         Arc::clone(&data),
+                        Arc::clone(&self.haptics),
                     ));
                     current.insert(
                         observation.bluez_path.clone(),
@@ -628,7 +639,7 @@ impl State {
             }
         }
 
-        for (px13pend_path, name, data) in installs {
+        for (px13pend_path, name, data, haptics) in installs {
             self.connection
                 .object_server()
                 .at(
@@ -644,7 +655,13 @@ impl State {
             // tells clients the same thing.
             self.connection
                 .object_server()
-                .at(path_of(&px13pend_path)?, Haptics { data })
+                .at(
+                    path_of(&px13pend_path)?,
+                    Haptics {
+                        data,
+                        settings: haptics,
+                    },
+                )
                 .await
                 .map_err(|error| format!("cannot export haptics on {px13pend_path}: {error}"))?;
             if announce {
@@ -1066,9 +1083,12 @@ impl Pen {
 
 /// The haptics interface, exported on every pen path (all pens of the
 /// first supported family play effects). Every method returns whether
-/// a report was actually written; suppression is not an error.
+/// a report was actually written; suppression is not an error. The
+/// policy properties are shared by every pen — one user, one policy —
+/// and persist to the user's config file (settings.rs).
 pub struct Haptics {
     data: Arc<Mutex<PenValues>>,
+    settings: Arc<Mutex<HapticsSettings>>,
 }
 
 #[zbus::interface(name = "io.github.gonzalezerik.Px13Pen.Haptics1")]
@@ -1077,18 +1097,18 @@ impl Haptics {
     /// without touching the pen — host policy, never a pen write.
     #[zbus(property)]
     fn enabled(&self) -> bool {
-        locked(&self.data).enabled
+        locked(&self.settings).enabled
     }
 
     #[zbus(property)]
-    fn set_enabled(&self, value: bool) {
-        locked(&self.data).enabled = value;
+    fn set_enabled(&self, value: bool) -> fdo::Result<()> {
+        self.apply(|settings| settings.enabled = value)
     }
 
     /// Default strength for calls passing the `255` sentinel, 0–100.
     #[zbus(property)]
     fn intensity(&self) -> u8 {
-        locked(&self.data).intensity
+        locked(&self.settings).intensity
     }
 
     #[zbus(property)]
@@ -1098,8 +1118,51 @@ impl Haptics {
                 "Intensity is 0..100, got {value}"
             )));
         }
-        locked(&self.data).intensity = value;
-        Ok(())
+        self.apply(|settings| settings.intensity = value)
+    }
+
+    /// Whether the tip's contact arms the ink texture. Off means
+    /// continuous ordinals are suppressed like any other write.
+    #[zbus(property)]
+    fn while_inking(&self) -> bool {
+        locked(&self.settings).while_inking
+    }
+
+    #[zbus(property)]
+    fn set_while_inking(&self, value: bool) -> fdo::Result<()> {
+        self.apply(|settings| settings.while_inking = value)
+    }
+
+    /// Whether discrete effects (the UI ticks: click, press, hover,
+    /// …) get through. Off makes them return `false` unwritten.
+    #[zbus(property)]
+    fn while_interacting(&self) -> bool {
+        locked(&self.settings).while_interacting
+    }
+
+    #[zbus(property)]
+    fn set_while_interacting(&self, value: bool) -> fdo::Result<()> {
+        self.apply(|settings| settings.while_interacting = value)
+    }
+
+    /// Which continuous texture the tip arms. One of the names the
+    /// capability list marks continuous, except `eraser` — the eraser
+    /// end always arms the eraser texture by itself.
+    #[zbus(property)]
+    fn ink_texture(&self) -> String {
+        locked(&self.settings).ink_texture.clone()
+    }
+
+    #[zbus(property)]
+    fn set_ink_texture(&self, value: &str) -> fdo::Result<()> {
+        let name = value.to_lowercase();
+        if !settings::is_ink_texture(&name) {
+            return Err(fdo::Error::InvalidArgs(format!(
+                "ink texture must be one of {}, got {value}",
+                settings::ink_textures().join(", ")
+            )));
+        }
+        self.apply(|settings| settings.ink_texture = name)
     }
 
     /// Play a waveform by name (case-insensitive, from the capability
@@ -1154,8 +1217,22 @@ impl Haptics {
 }
 
 impl Haptics {
+    /// Change one setting and persist it. The file is written before
+    /// the in-memory change, so a failed write leaves both untouched;
+    /// with no config path the change is memory-only.
+    fn apply(&self, change: impl FnOnce(&mut HapticsSettings)) -> fdo::Result<()> {
+        let next = {
+            let mut current = locked(&self.settings).clone();
+            change(&mut current);
+            current
+        };
+        settings::save(&next).map_err(fdo::Error::Failed)?;
+        *locked(&self.settings) = next;
+        Ok(())
+    }
+
     /// Validate the arguments against the policy, build the report,
-    /// then honour `Enabled` and `Present`.
+    /// then honour the toggles and `Present`.
     async fn play(
         &self,
         ordinal: u8,
@@ -1165,9 +1242,9 @@ impl Haptics {
         retrigger_ms: u16,
     ) -> fdo::Result<bool> {
         let (strength, cutoff) = {
-            let data = locked(&self.data);
+            let settings = locked(&self.settings);
             (
-                map_intensity(intensity, data.intensity).ok_or_else(|| {
+                map_intensity(intensity, settings.intensity).ok_or_else(|| {
                     fdo::Error::InvalidArgs(format!(
                         "intensity must be 0..100 or 255 (the Intensity property), got {intensity}"
                     ))
@@ -1179,6 +1256,9 @@ impl Haptics {
                 })?,
             )
         };
+        if !locked(&self.settings).plays(ordinal) {
+            return Ok(false);
+        }
         let report = Effect {
             ordinal,
             intensity: strength,
@@ -1194,8 +1274,9 @@ impl Haptics {
     /// CLI's pick-one error passes through.
     async fn write_policy(&self, effect: Effect) -> fdo::Result<bool> {
         let (enabled, present, address) = {
+            let settings = locked(&self.settings);
             let data = locked(&self.data);
-            (data.enabled, data.present, data.address.clone())
+            (settings.enabled, data.present, data.address.clone())
         };
         if !enabled {
             return Ok(false);
@@ -1353,12 +1434,5 @@ mod tests {
         base.battery = None;
         let values = PenValues::new(&base, BTreeMap::new());
         assert_eq!(values.battery, BATTERY_UNKNOWN);
-    }
-
-    #[test]
-    fn policy_defaults_are_on_and_full() {
-        let values = PenValues::new(&observation(), BTreeMap::new());
-        assert!(values.enabled);
-        assert_eq!(values.intensity, 100);
     }
 }

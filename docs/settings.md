@@ -29,6 +29,30 @@ with the daemon's reason). Pressing it again runs `StopPairing()`.
 When `px13pend` goes away the window stays open and says so: it is easier
 to restart a daemon than to recover a dead settings window.
 
+## Where the settings live
+
+The haptics policy belongs to the daemon, not to this window: the
+switches and the slider write `Haptics1` properties, and `px13pend`
+persists them to `px13pen/haptics.conf` under `$XDG_CONFIG_HOME`
+(`~/.config` when unset). One file per user, shared by every pen —
+the same shape as the Windows registry values it mirrors.
+
+```ini
+# px13pen haptics policy — written by px13pend; see docs/settings.md.
+enabled=true
+intensity=100
+while_inking=true
+while_interacting=true
+ink_texture=ink
+```
+
+The daemon rewrites the whole file on every change and re-reads it at
+startup; unknown keys and out-of-range values fall back to the
+defaults, so hand-editing is safe but pointless while a daemon is
+running — the next change overwrites the edit. Deleting the file
+resets everything to the defaults (all on, full strength) after a
+daemon restart.
+
 ## Menu and desktop entry
 
 The corner menu holds **About PX13 Pen** — version, licence, upstream

@@ -154,14 +154,26 @@ docs/protocol/haptics.md §2):
 
 ### Properties
 
+The policy properties are **per user, not per pen**: every pen path exports the same
+values, and setting one on any pen changes it for all of them — the same shape as the
+Windows registry values this mirrors (findings/006 §4).
+
 | Property | Type | Meaning |
 |---|---|---|
 | `Enabled` | `b` r/w | master haptics switch. `false` makes every method return `false` without touching the pen — exactly what the Windows toggles do (findings/006 §4). |
 | `Intensity` | `y` r/w | default strength for `PlayEffect`/`PlayOrdinal` calls that pass the `255` sentinel; 0–100, default 100. |
+| `WhileInking` | `b` r/w | whether the tip's contact arms the ink texture. Off, continuous ordinals return `false` unwritten. Default on. |
+| `WhileInteracting` | `b` r/w | whether discrete effects (the UI ticks — `click`, `press`, `hover`, …) get through. Off, they return `false` unwritten. Default on. |
+| `InkTexture` | `s` r/w | which continuous texture the tip arms: one of `ink`, `pencil`, `marker`, `chisel`, `brush`, `sparkle` (default `ink`). `eraser` is not settable — the eraser end always arms the eraser texture by itself. |
 
-Policy only: `Enabled` and `Intensity` are what `px13pend` applies at play time, never
-written to the pen, and **not yet persisted across daemon restarts** — a settings file
-lands with the settings app.
+The two toggles gate the methods by waveform class: with `WhileInking` off, the
+continuous ordinals are suppressed; with `WhileInteracting` off, the discrete ones
+are. The implicit ordinals (`Stop`, and `PlayOrdinal` with `none`/`stop`) are never
+gated beyond `Enabled` — stopping must always work while haptics are on.
+
+Policy only: these properties are what `px13pend` applies at play time and are never
+written to the pen. They persist across daemon restarts in `px13pen/haptics.conf`
+under `$XDG_CONFIG_HOME` (`~/.config` fallback) — format and keys in docs/settings.md.
 
 ## 8. Errors
 
@@ -185,7 +197,7 @@ message text so clients can branch:
   (`px13pend watch-buttons`), so v1 declares the buttons capability but emits no signals;
   the plan is a `ButtonEvent` signal on `Pen1` and a `uinput` key emitter owned by
   `px13pend` (docs/decisions.md), which needs no interface change for the emitter itself.
-- Persisted settings, D-Bus service activation.
+- D-Bus service activation.
 - The app-facing haptics portal (xdg-desktop-portal) — a separate interface on top of
   this one, out of scope here (docs/decisions.md §scope, item 3).
 
