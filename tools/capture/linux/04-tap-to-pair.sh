@@ -60,6 +60,8 @@ echo "--- dry round saw: ---"
 head -n 12 "$dir/watch-pair-dry.log" || true
 
 echo
+echo "btmon needs sudo; asking now, before anything runs in the background:"
+sudo -v
 echo "btmon -> $dir/btmon.log"
 sudo btmon -w "$dir/btmon.log" > /dev/null &
 btmon_pid=$!
@@ -72,6 +74,7 @@ echo "there a few seconds: oppctl watch shows it being found and paired, and a"
 echo "notification says the pen is paired. Then press Enter here to stop."
 read -r
 
+sudo -v
 sudo kill "$btmon_pid" 2>/dev/null || true
 kill "$journal_pid" "$watch_pid" 2>/dev/null || true
 trap - EXIT

@@ -80,19 +80,22 @@ async fn authorize(
     let mut subject_details = HashMap::new();
     subject_details.insert("name", Variant::from(sender.as_str()));
     let details: HashMap<&str, &str> = HashMap::new();
-    let check: zbus::Result<(bool, bool)> = polkit
+    // CheckAuthorization((sa{sv}) subject, s action_id, a{ss} details,
+    // u flags, s cancellation_id) -> (b is_authorized, b is_challenge,
+    // a{ss} details); the subject is its own struct.
+    let check: zbus::Result<(bool, bool, HashMap<String, String>)> = polkit
         .call(
             "CheckAuthorization",
             &(
-                "system-bus-name",
-                subject_details,
+                ("system-bus-name", subject_details),
                 PAIR_ACTION,
                 details,
                 0u32,
+                "",
             ),
         )
         .await;
-    let (authorized, _challenge) =
+    let (authorized, _challenge, _details) =
         check.map_err(|error| format!("the polkit check failed: {error}"))?;
     if authorized {
         Ok(())
