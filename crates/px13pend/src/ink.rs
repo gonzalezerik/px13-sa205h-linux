@@ -87,6 +87,11 @@ impl Arming {
         let desired = if !in_range {
             self.armed.as_ref().map(|_| Action::Disarm)
         } else if let Some((tool, armed)) = self.armed {
+            // The end in contact decides: flipping to the other end
+            // re-arms for its texture. Hovering keeps the armed tool's
+            // texture current, so a texture change or a policy close
+            // lands on the next report.
+            let tool = self.in_contact.unwrap_or(tool);
             match ordinal_for(tool) {
                 None => Some(Action::Disarm),
                 Some(want) if want != armed => Some(Action::Arm {
