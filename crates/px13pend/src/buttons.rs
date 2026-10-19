@@ -5,6 +5,11 @@
 //! ordinary input events. The key codes are still unknown — the
 //! button-matrix capture is pending — so this prints events verbatim:
 //! press each gesture and read off the codes.
+//!
+//! The pen's HID reports arrive on three uhid nodes at once (Keyboard,
+//! Mouse and the pen report itself, all named after the device), so
+//! every pen-named node is read in parallel and each line is tagged
+//! with the node it came from.
 
 use std::io::Read;
 use std::path::Path;
@@ -91,7 +96,9 @@ pub fn find_pen_nodes(sysroot: &Path) -> Vec<(String, String)> {
     found
 }
 
-/// Stream events from the pen's evdev node until stopped.
+/// Stream events from every pen-named evdev node until the last one
+/// closes (the pen slept or disconnected). One thread per node feeds a
+/// channel; the main thread prints `(device name, event)` lines.
 pub fn watch_buttons(list_only: bool) -> Result<(), String> {
     let nodes = find_pen_nodes(Path::new("/sys"));
     if list_only {
@@ -103,44 +110,54 @@ pub fn watch_buttons(list_only: bool) -> Result<(), String> {
         }
         return Ok(());
     }
-    let first = match nodes.as_slice() {
-        [] => {
-            return Err(
-                "no pen-named evdev node — is the pen paired and awake? BlueZ creates the node on \
-                 connect; reading /dev/input needs input group membership"
-                    .to_string(),
-            );
-        }
-        [only] => only,
-        [first, rest @ ..] => {
-            for (node, name) in rest {
-                println!("also present: /dev/input/{node}  {name}");
-            }
-            first
-        }
-    };
-    let (node, name) = first;
-    println!("reading /dev/input/{node} ({name}) — Ctrl-C to stop");
-    let mut file = std::fs::File::open(format!("/dev/input/{node}"))
-        .map_err(|error| format!("cannot open /dev/input/{node}: {error} (input group?)"))?;
-    let mut buffer = vec![0u8; 4096];
-    let mut pending: Vec<u8> = Vec::new();
-    loop {
-        let read = file
-            .read(&mut buffer)
-            .map_err(|error| format!("read from /dev/input/{node} failed: {error}"))?;
-        if read == 0 {
-            return Ok(());
-        }
-        pending.extend_from_slice(&buffer[..read]);
-        let complete = pending.len() - pending.len() % RECORD_BYTES;
-        for chunk in pending[..complete].as_chunks::<RECORD_BYTES>().0 {
-            if let Some(event) = parse_record(chunk) {
-                println!("{}", event.format());
-            }
-        }
-        pending.drain(..complete);
+    if nodes.is_empty() {
+        return Err(
+            "no pen-named evdev node — is the pen paired and awake? BlueZ creates the nodes on \
+             connect; reading /dev/input needs input group membership"
+                .to_string(),
+        );
     }
+    let (tx, rx) = std::sync::mpsc::channel::<(String, Event)>();
+    let mut opened = Vec::new();
+    for (node, name) in &nodes {
+        match std::fs::File::open(format!("/dev/input/{node}")) {
+            Ok(file) => opened.push((node, name, file)),
+            Err(error) => eprintln!("cannot open /dev/input/{node}: {error} (input group?)"),
+        }
+    }
+    if opened.is_empty() {
+        return Err("no pen evdev node could be opened".to_string());
+    }
+    for (node, name, file) in opened {
+        println!("reading /dev/input/{node} ({name}) — Ctrl-C to stop");
+        let (tx, node) = (tx.clone(), name.clone());
+        std::thread::spawn(move || {
+            let mut file = file;
+            let mut buffer = vec![0u8; 4096];
+            let mut pending: Vec<u8> = Vec::new();
+            // A failed read means the node vanished (the pen slept); a
+            // zero-length read means the kernel closed it. Either ends
+            // this node's stream.
+            while let Ok(read) = file.read(&mut buffer) {
+                if read == 0 {
+                    break;
+                }
+                pending.extend_from_slice(&buffer[..read]);
+                let complete = pending.len() - pending.len() % RECORD_BYTES;
+                for chunk in pending[..complete].as_chunks::<RECORD_BYTES>().0 {
+                    if let Some(event) = parse_record(chunk) {
+                        let _ = tx.send((node.clone(), event));
+                    }
+                }
+                pending.drain(..complete);
+            }
+        });
+    }
+    drop(tx);
+    for (name, event) in rx {
+        println!("{name}: {}", event.format());
+    }
+    Ok(())
 }
 
 #[cfg(test)]

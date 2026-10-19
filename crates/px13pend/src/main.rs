@@ -57,7 +57,7 @@ commands:
                       without this daemon)
       --device ADDR   pen address (default: the only pen-named device)
       --adapter NAME  BlueZ adapter to use (default: hci0)
-  watch-buttons       dump raw evdev events from the pen's input node,
+  watch-buttons       dump raw evdev events from every pen input node,
                       to identify what the top-button report becomes
       --list          list pen-named evdev nodes and exit
   pen-log             print the pen's firmware debug log live, one
