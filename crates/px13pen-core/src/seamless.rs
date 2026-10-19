@@ -74,9 +74,96 @@ pub fn parse_pairing_report(frame: &[u8]) -> Option<PairingNotification> {
     })
 }
 
+/// Feature report id of the Host Bluetooth Report (`0x56`): the host's own
+/// address, set by the host so the digitizer can tell whether a pen already
+/// has a pairing with it.
+pub const FEATURE_HOST: u8 = 0x56;
+
+/// Parse a colon-separated Bluetooth address, most-significant byte first.
+pub fn parse_address(text: &str) -> Option<[u8; 6]> {
+    let mut address = [0u8; 6];
+    let mut parts = text.split(':');
+    for byte in &mut address {
+        let part = parts.next()?;
+        if part.len() != 2 {
+            return None;
+        }
+        *byte = u8::from_str_radix(part, 16).ok()?;
+    }
+    parts.next().is_none().then_some(address)
+}
+
+/// The Host Bluetooth Report for an adapter address (most-significant byte
+/// first): little-endian address, then the address type (1 = random).
+pub fn host_report(address: &[u8; 6], random: bool) -> [u8; 8] {
+    let mut report = [0u8; 8];
+    report[0] = FEATURE_HOST;
+    for (to, from) in report[1..7].iter_mut().zip(address.iter().rev()) {
+        *to = *from;
+    }
+    report[7] = u8::from(random);
+    report
+}
+
+/// The Device Capability Report the host sends: seamless pair capable.
+pub fn capability_report() -> [u8; 2] {
+    [FEATURE_ENABLED, 0x01]
+}
+
+/// The Pairing Key Report for an announced pen: the address as the
+/// announcement carried it (little-endian), its type bit, then the key.
+pub fn pairing_key_report(note: &PairingNotification, key: &[u8; 16]) -> [u8; 24] {
+    let mut report = [0u8; 24];
+    report[0] = OUTPUT_KEY_RELAY;
+    for (to, from) in report[1..7].iter_mut().zip(note.address.iter().rev()) {
+        *to = *from;
+    }
+    report[7] = note.flags & FLAG_ADDRESS;
+    report[8..].copy_from_slice(key);
+    report
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_report_is_little_endian_with_its_type() {
+        let address = [0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f];
+        assert_eq!(
+            host_report(&address, false),
+            [0x56, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x00]
+        );
+        assert_eq!(host_report(&address, true)[7], 0x01);
+    }
+
+    #[test]
+    fn key_report_echoes_the_announcement() {
+        let note = parse_pairing_report(&wire_frame(0x03)).unwrap();
+        let report = pairing_key_report(&note, &[0x11; 16]);
+        assert_eq!(
+            &report[..8],
+            &[0x6f, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x01]
+        );
+        assert_eq!(&report[8..], &[0x11; 16]);
+    }
+
+    #[test]
+    fn addresses_parse_most_significant_first() {
+        let text = String::from("0A:0B:0C:0D:0E") + ":0F";
+        assert_eq!(
+            parse_address(&text),
+            Some([0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f])
+        );
+        assert_eq!(parse_address("0A:0B"), None);
+        assert_eq!(parse_address(&(text.clone() + ":10")), None);
+        assert_eq!(parse_address("0A:0B:0C:0D:0E:ZZ"), None);
+    }
+
+    #[test]
+    fn capability_says_capable() {
+        assert_eq!(capability_report(), [0x70, 0x01]);
+    }
 
     // The privacy gate rejects any literal shaped like a Bluetooth address,
     // so the expected string is assembled from two harmless pieces.

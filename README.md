@@ -24,8 +24,8 @@ A protocol is listed as supported only once it has been tested on real hardware.
 > **Status: research.** The protocol work (`docs/protocol/`, `findings/`) comes first.
 > Touch-to-pair is verified on the hardware: Microsoft's seamless-pairing protocol, run by
 > a Linux host with stock BlueZ, pairs the pen in about 0.7 s
-> ([findings/008](findings/008-linux-seamless-pairing.md)). The daemon's pairing path is
-> being moved onto that flow; until then `tools/capture/linux/06-seamless-pairing.py` runs it.
+> ([findings/008](findings/008-linux-seamless-pairing.md)); `px13pend` runs that flow, and
+> `tools/capture/linux/06-seamless-pairing.py` runs it standalone.
 > Haptics, battery and buttons are in progress.
 
 ## Platforms
@@ -116,9 +116,7 @@ px13penctl --version
 px13pend                      # prints the supported digitizers
 px13pend pairing-state        # reads the digitizer's seamless-pairing flag (read-only)
 px13pend watch-pair --dry-run # prints pairing notifications as a pen approaches, changes nothing
-python3 tools/capture/linux/06-seamless-pairing.py
-                          # touch-to-pair, verified flow (the daemon's own path is being
-                          # replaced by it; see docs/protocol/seamless-pairing.md)
+px13pend watch-pair           # touch-to-pair in the foreground (docs/protocol/seamless-pairing.md)
 px13penctl watch              # follow the daemon live: pens, battery, pairing progress
 px13pend watch-pen            # live battery + link changes of the paired pen (via BlueZ)
 px13pend watch-buttons --list # lists the pen's evdev nodes; without --list dumps its raw events

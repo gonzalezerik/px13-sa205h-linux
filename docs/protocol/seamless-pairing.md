@@ -84,6 +84,11 @@ once a kernel has it, the host sends a random key and pairs out-of-band with no 
 - **Several identities.** Announced address, per-host bond identity and button-pairing-mode identity
   can all differ, and change after new bonds. Connect to the advertiser that appears after the key,
   not to the announced address.
+- **Wake-up advertisement.** A pen that holds a pairing for this host advertises by itself as soon
+  as it wakes (picked up, or its link dropped), before the digitizer announces it; after a dropped
+  link it keeps advertising for about 40 s. A host that already sees that advertiser must pair it
+  rather than forget it as a leftover: pairing an object the stack knows makes the controller wait
+  for the pen's next advertisement itself, which catches the short burst that follows the key.
 - **Back-off.** After a failed pairing or an advertisement nobody connected to, the pen often skips
   the next touch within about two minutes. Keep the scan armed and react to the next announcement.
 - **Already connected.** The digitizer keeps announcing a pen in range even while that pen is
@@ -102,11 +107,13 @@ collection's other vendor reports and the firmware-update collection stay untouc
 
 - `tools/capture/linux/06-seamless-pairing.py` runs the whole flow against the installed package
   (BlueZ through an interactive `bluetoothctl` with a KeyboardOnly agent). It is the reference.
-- The daemon's own pairing path still predates these findings: `px13pend serve` pairs the announced
-  address through `ConnectDevice` or the management helper with Just Works, which this pen never
-  answers. It is being replaced by the flow above (register host at start, scan armed while a pen is
-  in range, key on announcement, pair the advertiser through the daemon's own KeyboardOnly agent,
-  notify on success). Until then, pair with the script or with button pairing mode.
+- The daemon runs the same flow (`crates/px13pend/src/pairing.rs`): `px13pend serve` registers the host
+  when it opens the digitizer, starts an LE scan for 20 s whenever report 7 shows the pen in range
+  and no pen is connected, writes the key report on each announcement, pairs the first unpaired
+  pen-looking device that advertises (appearance `0x03C7` or "Pen" in the name) through its own
+  KeyboardOnly agent, marks it trusted and notifies at once. A paired pen that does not reconnect
+  within 3 s of an announcement is treated as a stale bond and paired fresh. `px13pend watch-pair`
+  does the same in the foreground.
 - **Use your own agent.** BlueZ sends pairing questions to the agent of the client that started
   the pairing, and otherwise to the session's default agent — on a desktop that is usually the
   shell's (KeyboardDisplay, with passkey and approve/deny popups, and requests rejected while

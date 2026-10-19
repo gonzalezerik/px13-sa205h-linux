@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- `px13pend` pairs by touch the way the hardware runs proved: it registers the host with the
+  digitizer, scans while a pen is in range, answers each announcement with the key report and
+  pairs the pen's advertisement through its own KeyboardOnly agent (passkey 0), so no desktop
+  pairing prompt appears; the "paired" notification fires the moment the bond completes. The
+  previous Just Works route to the announced address is gone from the daemon.
 - Touch-to-pair verified on the hardware. The digitizer's `0xFFF4` collection is Microsoft's
   published *Seamless Pairing for Windows Pens* protocol; a Linux host that registers its
   address (`0x56`), exchanges capability (`0x70`), sends a pairing key (`0x6F`) on the pen's

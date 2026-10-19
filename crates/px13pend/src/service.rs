@@ -19,6 +19,7 @@
 //! through the same getter.
 
 use std::collections::{BTreeMap, HashMap};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -60,6 +61,8 @@ const RETRY_AFTER: Duration = Duration::from_secs(5);
 /// Failures within this long of the previous one belong to the same
 /// streak and stay out of the notifications; a later one is news again.
 const FAILURE_STREAK: Duration = Duration::from_secs(60);
+/// How long the LE scan keeps running after the pen was last seen in range.
+const SCAN_WINDOW: Duration = Duration::from_secs(20);
 
 /// Battery sentinel while BlueZ has not reported a level yet (docs/dbus.md §5).
 const BATTERY_UNKNOWN: i32 = -1;
@@ -109,6 +112,14 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         None
     };
     let listening = listener.is_some();
+    let agent = if listening {
+        crate::pairing::register_agent(&bluez)
+            .await
+            .inspect_err(|error| eprintln!("pairing agent: {error}"))
+            .ok()
+    } else {
+        None
+    };
     let state = Arc::new(State {
         connection: connection.clone(),
         bluez,
@@ -118,7 +129,11 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         pens: Mutex::new(BTreeMap::new()),
         listener: Mutex::new(listener),
         attempts: Mutex::new(HashMap::new()),
+        agent,
+        scan_until: Mutex::new(None),
+        register_due: AtomicBool::new(false),
     });
+    state.register_host().await;
     connection
         .object_server()
         .at(
@@ -155,6 +170,10 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         if let Err(error) = state.drain_announcements(&daemon).await {
             eprintln!("pairing listener: {error}");
         }
+        state.expire_scan().await;
+        if state.register_due.swap(false, Ordering::SeqCst) {
+            state.register_host().await;
+        }
         tick = tick.wrapping_add(1);
         if tick.is_multiple_of(SYNC_EVERY_TICKS)
             && let Err(error) = state.sync_pens(&daemon, true).await
@@ -168,6 +187,12 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
 /// capability key. Failing here is not fatal: pens still get `manual`.
 fn digitizer_present() -> bool {
     HidApi::new().is_ok_and(|api| crate::find_digitizer(&api).is_ok())
+}
+
+/// True for a pen report (`0x07`) with In Range set: the pen hovers or
+/// touches. The layout is docs/protocol/digitizer-tlc.md's report 7.
+fn pen_in_range(frame: &[u8]) -> bool {
+    frame.len() >= 2 && frame[0] == 0x07 && frame[1] & 0x01 != 0
 }
 
 /// Open the digitizer's hidraw node non-blocking, ready for the
@@ -199,6 +224,12 @@ struct State {
     pens: Mutex<BTreeMap<String, PenEntry>>,
     listener: Mutex<Option<HidDevice>>,
     attempts: Mutex<HashMap<String, Attempt>>,
+    /// The daemon's own BlueZ pairing agent; `None` if BlueZ refused it.
+    agent: Option<crate::pairing::Agent>,
+    /// While set, the LE scan for a pen's advertisement runs until then.
+    scan_until: Mutex<Option<Instant>>,
+    /// Set when the host must be registered with the digitizer again.
+    register_due: AtomicBool,
 }
 
 /// The listener's memory of one announced address.
@@ -318,11 +349,12 @@ struct Observation {
 }
 
 impl State {
-    /// Drain pairing announcements from the digitizer. Every read is
-    /// non-blocking; an empty read ends the drain.
+    /// Drain the digitizer: a pen coming into range arms the LE scan, an
+    /// announcement runs a seamless pairing. Every read is non-blocking; an
+    /// empty read ends the drain.
     async fn drain_announcements(&self, daemon: &InterfaceRef<Daemon>) -> Result<(), String> {
         for _ in 0..DRAIN_LIMIT {
-            let note = {
+            let frame = {
                 let guard = locked(&self.listener);
                 let Some(device) = guard.as_ref() else {
                     return Ok(());
@@ -330,93 +362,152 @@ impl State {
                 let mut frame = [0u8; crate::READ_BUF_BYTES];
                 match device.read(&mut frame) {
                     Ok(0) | Err(_) => return Ok(()),
-                    Ok(len) => seamless::parse_pairing_report(&frame[..len]),
+                    Ok(len) => frame[..len].to_vec(),
                 }
             };
-            let Some(note) = note else { continue };
-            let address = note.address_string();
-            // A pen already on a live link needs nothing; the digitizer
-            // may still mention it now and then.
-            if self.pen_connected(&address) {
+            if pen_in_range(&frame) {
+                self.arm_scan().await;
                 continue;
             }
-            let failed_before = {
-                let mut attempts = locked(&self.attempts);
-                if attempts
-                    .get(&address)
-                    .is_some_and(|attempt| attempt.at.elapsed() < RETRY_AFTER)
-                {
-                    continue;
-                }
-                let failed_before = attempts
-                    .get(&address)
-                    .is_some_and(|attempt| attempt.failed && attempt.at.elapsed() < FAILURE_STREAK);
-                attempts.insert(
-                    address.clone(),
-                    Attempt {
-                        at: Instant::now(),
-                        failed: failed_before,
-                    },
-                );
-                failed_before
+            let Some(note) = seamless::parse_pairing_report(&frame) else {
+                continue;
             };
-            eprintln!("pen announced: {address}");
-            emit_pairing(daemon, "announced", &address).await?;
-            let outcome = crate::bond(&self.bluez, &self.adapter, &address).await;
-            let failed = outcome.is_err();
-            locked(&self.attempts).insert(
+            self.on_announcement(daemon, &note).await?;
+        }
+        Ok(())
+    }
+
+    /// Start (or extend) the LE scan while a pen is in range and none is
+    /// connected, so it already runs when the pen answers the key report.
+    async fn arm_scan(&self) {
+        let fresh = {
+            let mut until = locked(&self.scan_until);
+            let fresh = until.is_none();
+            *until = Some(Instant::now() + SCAN_WINDOW);
+            fresh
+        };
+        if fresh {
+            if crate::pairing::any_pen_connected(&self.bluez, &self.adapter).await {
+                *locked(&self.scan_until) = None;
+                return;
+            }
+            if let Err(error) = crate::pairing::start_scan(&self.bluez, &self.adapter).await {
+                eprintln!("pen scan: {error}");
+                *locked(&self.scan_until) = None;
+            }
+        }
+    }
+
+    /// Stop the scan once its window has passed.
+    async fn expire_scan(&self) {
+        let expired = {
+            let mut until = locked(&self.scan_until);
+            let expired = until.is_some_and(|until| Instant::now() >= until);
+            if expired {
+                *until = None;
+            }
+            expired
+        };
+        if expired {
+            crate::pairing::stop_scan(&self.bluez, &self.adapter).await;
+        }
+    }
+
+    /// Write the Host Bluetooth and Capability reports to the digitizer.
+    async fn register_host(&self) {
+        let Some(device) = self.take_listener() else {
+            return;
+        };
+        if let Err(error) = crate::pairing::register_host(&self.bluez, &self.adapter, &device).await
+        {
+            eprintln!("host registration: {error}");
+        }
+        self.put_listener(device);
+    }
+
+    /// One announcement: skip a pen that is already on a live link, keep a
+    /// short pause per address, else pair and tell the user right away.
+    async fn on_announcement(
+        &self,
+        daemon: &InterfaceRef<Daemon>,
+        note: &seamless::PairingNotification,
+    ) -> Result<(), String> {
+        let Some(agent) = self.agent.clone() else {
+            return Ok(());
+        };
+        if crate::pairing::any_pen_connected(&self.bluez, &self.adapter).await {
+            return Ok(());
+        }
+        let address = note.address_string();
+        let failed_before = {
+            let mut attempts = locked(&self.attempts);
+            if attempts
+                .get(&address)
+                .is_some_and(|attempt| attempt.at.elapsed() < RETRY_AFTER)
+            {
+                return Ok(());
+            }
+            let failed_before = attempts
+                .get(&address)
+                .is_some_and(|attempt| attempt.failed && attempt.at.elapsed() < FAILURE_STREAK);
+            attempts.insert(
                 address.clone(),
                 Attempt {
                     at: Instant::now(),
-                    failed,
+                    failed: failed_before,
                 },
             );
-            match outcome {
-                Ok(bonded) => {
-                    eprintln!("{}", bonded.describe(&address));
-                    emit_pairing(daemon, "bonded", &address).await?;
-                    if bonded.is_new_bond() {
-                        let name = self.pen_name(&address).await;
-                        self.notify(&format!("{name} paired"), "The pen is ready to use.")
-                            .await;
-                    }
-                }
-                Err(message) => {
-                    eprintln!("pairing failed: {message}");
-                    emit_pairing(daemon, "failed", &format!("{address}: {message}")).await?;
-                    // One notification per failing streak; the retries that
-                    // follow every few seconds stay in the log.
-                    if !failed_before {
-                        self.notify("Pen pairing failed", &message).await;
-                    }
+            failed_before
+        };
+        eprintln!("pen announced: {address} (flags 0x{:02X})", note.flags);
+        emit_pairing(daemon, "announced", &address).await?;
+        let Some(device) = self.take_listener() else {
+            return Ok(());
+        };
+        let outcome =
+            crate::pairing::pair_announced(&self.bluez, &self.adapter, &device, note, &agent).await;
+        self.put_listener(device);
+        locked(&self.attempts).insert(
+            address.clone(),
+            Attempt {
+                at: Instant::now(),
+                failed: outcome.is_err(),
+            },
+        );
+        match outcome {
+            Ok(crate::pairing::Outcome::Paired { name, address }) => {
+                *locked(&self.scan_until) = None;
+                crate::pairing::stop_scan(&self.bluez, &self.adapter).await;
+                eprintln!("paired and trusted {address}");
+                self.notify(&format!("{name} paired"), "The pen is ready to use.")
+                    .await;
+                emit_pairing(daemon, "bonded", &address).await?;
+            }
+            Ok(crate::pairing::Outcome::Reconnected { address }) => {
+                eprintln!("reconnected to paired pen {address}");
+            }
+            Err(message) => {
+                eprintln!("pairing failed: {message}");
+                emit_pairing(daemon, "failed", &format!("{address}: {message}")).await?;
+                if !failed_before {
+                    self.notify("Pen pairing failed", &message).await;
                 }
             }
         }
         Ok(())
     }
 
-    /// Whether BlueZ already has this pen on a live link, from the last
-    /// sync (at most half a second old).
-    fn pen_connected(&self, address: &str) -> bool {
-        locked(&self.pens).values().any(|entry| {
-            let values = locked(&entry.data);
-            values.present && values.address.eq_ignore_ascii_case(address)
-        })
+    /// Borrow the digitizer node for a step that awaits; no lock is held
+    /// across an await.
+    fn take_listener(&self) -> Option<HidDevice> {
+        locked(&self.listener).take()
     }
 
-    /// The pen's Bluetooth alias for messages; its model name until BlueZ
-    /// has one.
-    async fn pen_name(&self, address: &str) -> String {
-        let path = format!(
-            "{BLUEZ_ROOT}/{}/dev_{}",
-            self.adapter,
-            address.replace(':', "_")
-        );
-        let alias = match Proxy::new(&self.bluez, BLUEZ, path.as_str(), DEVICE1).await {
-            Ok(device) => device.get_property::<String>("Alias").await.ok(),
-            Err(_) => None,
-        };
-        alias.unwrap_or_else(|| "Pen".to_string())
+    fn put_listener(&self, device: HidDevice) {
+        let mut listener = locked(&self.listener);
+        if listener.is_none() {
+            *listener = Some(device);
+        }
     }
 
     /// A desktop notification through org.freedesktop.Notifications.
@@ -855,6 +946,9 @@ impl Daemon {
         *locked(&self.state.listener) = Some(device);
         // A fresh search retries every pen at once, failed ones included.
         locked(&self.state.attempts).clear();
+        // The digitizer node is not thread-safe, so the service loop does
+        // the registration on its next tick.
+        self.state.register_due.store(true, Ordering::SeqCst);
         self.pairing_active = true;
         self.pairing_active_changed(&emitter)
             .await

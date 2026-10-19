@@ -123,6 +123,13 @@ the kernel feature itself; it is noted as future work in `docs/future/kernel-le-
   advertised and bonded under for a host it already knew, another after button pairing mode, and a
   new one after bonding with the second test identity. The announced address changed over the day
   as well. Never assume the announced address is the one to connect to; match the advertiser.
+- **Wake-up advertisement.** With Host Pairing Exists set, the pen advertised from its bond identity
+  the moment it woke, before the digitizer's announcement: 4.4 s ahead in one run (picked up away
+  from the screen), 15 ms after first hover in another (picked up after 18 min untouched). After the
+  host dropped its link it advertised continuously (about 12 reports per second) for 40 s. In a run
+  where the host removed that fresh device object before sending the key, the pen did not answer
+  the key. Pairing the existing object instead (the controller then waits for the next
+  advertisement) bonded in 0.7 s on the first touch, three runs out of three.
 - **Back-off.** After a failed pairing or an advertisement nobody connected to, the next touch within
   about two minutes often produced no advertisement; a later touch did. A daemon should keep its scan
   armed and simply react to the next announcement.

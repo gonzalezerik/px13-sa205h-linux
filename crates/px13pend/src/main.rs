@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Daemon for MPP 2.6 pens: pairing, haptics, battery, buttons.
 //!
-//! Implemented today: tap-to-pair (`docs/protocol/seamless-pairing.md`)
-//! and pen presence. `watch-pair` listens on the supported digitizer's
-//! hidraw node for the `0x6E` pairing notification and bonds the announced
-//! pen through BlueZ; `pairing-state` reads the digitizer's
-//! seamless-pairing feature report; both only read from the digitizer —
-//! the write ban on the vendor output reports is respected
-//! (seamless-pairing.md §4). `watch-pen` follows battery and link state
-//! through BlueZ; `watch-buttons` dumps the pen's raw evdev events so the
-//! top-button codes can be identified. `haptic` plays one effect with
-//! the single output report 0x41 and writes nothing unless `--send` is
-//! given. `serve` exports the D-Bus interface of docs/dbus.md: a Daemon
-//! object, one object per pen BlueZ knows, and the pairing listener.
+//! Touch-to-pair (`docs/protocol/seamless-pairing.md`): `watch-pair` and
+//! `serve` register this host with the digitizer, answer the digitizer's
+//! `0x6E` announcement with the key report and pair the pen's advertisement
+//! through BlueZ with the daemon's own agent (`pairing.rs`). `pairing-state`
+//! reads the digitizer's capability report. `watch-pen` follows battery and
+//! link state through BlueZ; `watch-buttons` dumps the pen's raw evdev
+//! events so the top-button codes can be identified. `haptic` plays one
+//! effect with the single output report 0x41 and writes nothing unless
+//! `--send` is given. `serve` exports the D-Bus interface of docs/dbus.md:
+//! a Daemon object, one object per pen BlueZ knows, and the pairing
+//! listener.
 
 use std::collections::HashMap;
 use std::process::ExitCode;
@@ -20,38 +19,31 @@ use std::time::{Duration, Instant};
 
 mod buttons;
 mod haptics;
+mod pairing;
 mod presence;
 mod service;
 
-use futures_timer::Delay;
-use futures_util::future::Either;
 use hidapi::{DeviceInfo, HidApi};
 use px13pen_core::seamless;
-use zbus::wire::ObjectPath;
-use zbus::{Connection, Proxy, Variant, fdo};
+use zbus::Connection;
 
 /// Input buffers must fit the largest input report the device can send.
 const READ_BUF_BYTES: usize = 8192;
 
-/// A stale bond can leave `Connect` hanging rather than failing outright;
-/// past this the bond is treated as dead and rebuilt. That is the normal
-/// dual-boot state: the machine has one controller and the pen keeps
-/// exactly one bond, so a boot on the other OS invalidates BlueZ's key.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// The pen re-announces on every touch and range event — nine frames in
-/// 84 s in the reference capture — so one bond attempt per address per
-/// window; frames inside it repeat a run that is in flight or just done.
+/// The pen re-announces on every touch and range event, so one pairing
+/// attempt per address per window; frames inside it repeat a run that is in
+/// flight or just done.
 const ANNOUNCE_DEBOUNCE: Duration = Duration::from_secs(3);
 
 const USAGE: &str = "\
 usage: px13pend <command> [options]
 
 commands:
-  watch-pair          wait for the digitizer to announce a pen (input report
-                      0x6E) and bond it through BlueZ: ConnectDevice with
-                      AddressType=random, then Pair, then Trusted
-      --dry-run       print what would happen; touch no Bluetooth state
+  watch-pair          register this host with the digitizer, then pair every
+                      pen it announces (input report 0x6E): key report,
+                      the pen's advertisement, Pair with passkey 0, Trusted
+      --dry-run       print the announcements; write nothing, touch no
+                      Bluetooth state
       --adapter NAME  BlueZ adapter to use (default: hci0)
   pairing-state       read the digitizer's seamless-pairing feature report
                       (0x70) and print it; read-only
@@ -202,9 +194,10 @@ pub(crate) fn one_per_node<'a>(
         .collect()
 }
 
-/// Open the digitizer and bond every pen it announces. Runs until stopped.
-/// One `block_on` owns the loop, so the D-Bus connection keeps its executor
-/// alive across notifications.
+/// Open the digitizer and pair every pen it announces, the same seamless
+/// flow `serve` runs (pairing.rs). Runs until stopped. One `block_on` owns
+/// the loop, so the D-Bus connection keeps its executor alive across
+/// announcements.
 fn watch_pair(dry_run: bool, adapter: &str) -> Result<(), String> {
     let adapter = adapter.to_string();
     zbus::block_on(watch_pair_async(dry_run, adapter))
@@ -216,19 +209,24 @@ async fn watch_pair_async(dry_run: bool, adapter: String) -> Result<(), String> 
     let device = api
         .open_path(info.path())
         .map_err(|error| format!("cannot open {}: {error}", info.path().to_string_lossy()))?;
-    let connection = if dry_run {
+    let session = if dry_run {
         None
     } else {
-        Some(Connection::system().await.map_err(|error| {
+        let bluez = Connection::system().await.map_err(|error| {
             format!("cannot reach the system bus (is bluetoothd running?): {error}")
-        })?)
+        })?;
+        let agent = pairing::register_agent(&bluez).await?;
+        pairing::register_host(&bluez, &adapter, &device).await?;
+        // The pen answers the key within milliseconds: scan for the whole run.
+        pairing::start_scan(&bluez, &adapter).await?;
+        Some((bluez, agent))
     };
     println!("watching for pairing notifications — bring the pen near the screen (Ctrl-C to stop)");
     let start = Instant::now();
     let mut frame = vec![0u8; READ_BUF_BYTES];
     let mut last_attempt = HashMap::<String, Instant>::new();
     // `device.read` parks the executor while we wait on the digitizer;
-    // announcements arriving mid-bond queue in the kernel buffer and land
+    // announcements arriving mid-pairing queue in the kernel buffer and land
     // as a burst afterwards — the debounce window swallows them.
     loop {
         let len = device
@@ -243,255 +241,42 @@ async fn watch_pair_async(dry_run: bool, adapter: String) -> Result<(), String> 
             start.elapsed().as_secs_f64(),
             note.flags
         );
-        if dry_run {
-            println!("  {}", dry_run_plan(&address, &adapter));
-        } else if let Some(connection) = &connection {
-            if last_attempt
-                .get(&address)
-                .is_some_and(|when| when.elapsed() < ANNOUNCE_DEBOUNCE)
-            {
-                continue;
-            }
-            last_attempt.insert(address.clone(), Instant::now());
-            match bond(connection, &adapter, &address).await {
-                Ok(bonded) => println!("  {}", bonded.describe(&address)),
-                Err(message) => eprintln!("  pairing failed: {message}"),
-            }
-        }
-    }
-}
-
-/// How one announcement ended, for logs and for deciding what to tell the
-/// user: only a new bond is news, reconnects stay quiet.
-pub(crate) enum Bonded {
-    /// BlueZ already had the pen on a live link.
-    AlreadyConnected,
-    /// A known pen whose stored key still worked.
-    Reconnected,
-    /// A new bond: first contact, or a stale one replaced.
-    Paired { via_helper: bool },
-}
-
-impl Bonded {
-    pub(crate) fn is_new_bond(&self) -> bool {
-        matches!(self, Bonded::Paired { .. })
-    }
-
-    pub(crate) fn describe(&self, address: &str) -> String {
-        match self {
-            Bonded::AlreadyConnected => format!("already paired and connected: {address}"),
-            Bonded::Reconnected => format!("reconnected to paired pen {address}"),
-            Bonded::Paired { via_helper: false } => format!("paired and trusted {address}"),
-            Bonded::Paired { via_helper: true } => {
-                format!("paired and trusted {address} (kernel-initiated)")
-            }
-        }
-    }
-}
-
-/// Bond one announced pen through BlueZ.
-///
-/// Fresh bond: `ConnectDevice` to the announced random-static address with
-/// `AddressType=random` (the pen never advertises — only the digitizer
-/// knows it), then `Pair` (LE Just Works: the digitizer already
-/// authenticated the pen by announcing it), then mark `Trusted`.
-///
-/// A pen BlueZ lists as `Paired` is not skipped: the other OS re-pairs the
-/// pen on every tap, so after a boot there BlueZ's key is stale by design.
-/// Try plain `Connect` first; if the key is rejected or the connect hangs,
-/// drop BlueZ's record and bond fresh — the same model Windows uses.
-async fn bond(connection: &Connection, adapter: &str, address: &str) -> Result<Bonded, String> {
-    let adapter_path = format!("/org/bluez/{adapter}");
-    let pen_path = format!("{adapter_path}/dev_{}", address.replace(':', "_"));
-    let adapter_proxy = Proxy::new(
-        connection,
-        "org.bluez",
-        adapter_path.as_str(),
-        "org.bluez.Adapter1",
-    )
-    .await
-    .map_err(|error| format!("adapter {adapter}: {error}"))?;
-    let pen_proxy = Proxy::new(
-        connection,
-        "org.bluez",
-        pen_path.as_str(),
-        "org.bluez.Device1",
-    )
-    .await
-    .map_err(|error| format!("pen object {pen_path}: {error}"))?;
-    if pen_proxy
-        .get_property::<bool>("Paired")
-        .await
-        .unwrap_or(false)
-    {
-        if pen_proxy
-            .get_property::<bool>("Connected")
-            .await
-            .unwrap_or(false)
+        let Some((bluez, agent)) = &session else {
+            println!("  {}", dry_run_plan(note.flags));
+            continue;
+        };
+        if last_attempt
+            .get(&address)
+            .is_some_and(|when| when.elapsed() < ANNOUNCE_DEBOUNCE)
         {
-            return Ok(Bonded::AlreadyConnected);
+            continue;
         }
-        // The announcement proves the pen is in range; if BlueZ's key is
-        // still current a plain Connect finishes in well under a second.
-        let connect = pen_proxy.call("Connect", &());
-        match futures_util::future::select(std::pin::pin!(connect), Delay::new(CONNECT_TIMEOUT))
-            .await
-        {
-            Either::Left((Ok(()), _)) => {
-                return Ok(Bonded::Reconnected);
+        last_attempt.insert(address.clone(), Instant::now());
+        if pairing::any_pen_connected(bluez, &adapter).await {
+            println!("  a pen is already connected; nothing to do");
+            continue;
+        }
+        match pairing::pair_announced(bluez, &adapter, &device, &note, agent).await {
+            Ok(pairing::Outcome::Paired { address, .. }) => {
+                println!("  paired and trusted {address}");
             }
-            Either::Left((Err(error), _)) if is_stale_bond_error(&error) => {
-                println!("  {address}: stored bond is stale ({error}) — re-pairing");
-                remove_device(&adapter_proxy, &pen_path).await?;
+            Ok(pairing::Outcome::Reconnected { address }) => {
+                println!("  reconnected to paired pen {address}");
             }
-            Either::Left((Err(error), _)) => return Err(format!("Connect({address}): {error}")),
-            Either::Right((_due, _pending)) => {
-                println!("  {address}: Connect timed out — the key is likely stale, re-pairing");
-                remove_device(&adapter_proxy, &pen_path).await?;
-            }
+            Err(message) => eprintln!("  pairing failed: {message}"),
         }
     }
-    let mut properties = HashMap::new();
-    properties.insert("Address", Variant::from(address));
-    properties.insert("AddressType", Variant::from("random"));
-    let connected: zbus::Result<()> = adapter_proxy.call("ConnectDevice", &properties).await;
-    if let Err(error) = connected {
-        if is_unknown_method(&error) {
-            // Stock bluetoothd: `ConnectDevice` is experimental and simply
-            // not exported. Pair through the kernel management interface;
-            // bluetoothd adopts the bond through its management callbacks
-            // and the rest finishes over D-Bus like any other pen.
-            pair_through_helper(connection, adapter, address).await?;
-            pen_proxy
-                .set_property("Trusted", true)
-                .await
-                .map_err(|error| format!("Trusted: {error}"))?;
-            return Ok(Bonded::Paired { via_helper: true });
-        }
-        if !is_bluez_error(
-            &error,
-            &[
-                "org.bluez.Error.AlreadyConnected",
-                "org.bluez.Error.InProgress",
-            ],
-        ) {
-            return Err(format!("ConnectDevice({address}): {error}"));
-        }
-    }
-    let pair: zbus::Result<()> = pen_proxy.call("Pair", &()).await;
-    if let Err(error) = pair
-        && !is_bluez_error(&error, &["org.bluez.Error.AlreadyExists"])
-    {
-        return Err(format!("Pair: {error}"));
-    }
-    pen_proxy
-        .set_property("Trusted", true)
-        .await
-        .map_err(|error| format!("Trusted: {error}"))?;
-    Ok(Bonded::Paired { via_helper: false })
 }
 
-/// The no-configuration path. Stock bluetoothd exports no way to bond a
-/// device that never advertises — `ConnectDevice` has been `[experimental]`
-/// since it was added — so the privileged pairing helper issues
-/// `MGMT_OP_PAIR_DEVICE` on the kernel management socket instead. bluetoothd
-/// adopts connections and keys it did not start (its management callbacks
-/// register the device and store the long-term key), so `Device1` appears
-/// and `Trusted` completes the bond as usual.
-///
-/// [HYP] until the first hardware session proves GATT discovery and the HID
-/// over GATT probe after a kernel-initiated bond.
-async fn pair_through_helper(
-    connection: &Connection,
-    adapter: &str,
-    address: &str,
-) -> Result<(), String> {
-    let helper = Proxy::new(
-        connection,
-        "io.github.gonzalezerik.Px13Pen.PairHelper1",
-        "/io/github/gonzalezerik/Px13Pen/PairHelper1",
-        "io.github.gonzalezerik.Px13Pen.PairHelper1",
-    )
-    .await
-    .map_err(|_| {
-        "pairing helper is not available — is the px13-sa205h-linux package installed?".to_string()
-    })?;
-    let paired: zbus::Result<()> = helper.call("PairDevice", &(address, adapter)).await;
-    paired.map_err(|error| format!("pairing helper: {error}"))?;
-    // Adoption lands within a moment of the pairing-complete event.
-    let pen_path = format!("/org/bluez/{adapter}/dev_{}", address.replace(':', "_"));
-    let pen_proxy = Proxy::new(
-        connection,
-        "org.bluez",
-        pen_path.as_str(),
-        "org.bluez.Device1",
-    )
-    .await
-    .map_err(|error| format!("pen object {pen_path}: {error}"))?;
-    for _ in 0..40 {
-        if pen_proxy
-            .get_property::<bool>("Paired")
-            .await
-            .unwrap_or(false)
-        {
-            return Ok(());
-        }
-        Delay::new(Duration::from_millis(250)).await;
-    }
-    Err("paired in the kernel, but bluetoothd did not adopt the bond".to_string())
-}
-
-/// What a real run would do, phrased in the argument names BlueZ uses so
-/// the dry run cannot drift away from the code path it previews.
-fn dry_run_plan(address: &str, adapter: &str) -> String {
+/// What a real run would do with this announcement.
+fn dry_run_plan(flags: u8) -> String {
+    let pairing = if flags & seamless::FLAG_CONSUMER != 0 {
+        "the pen has a pairing with this host"
+    } else {
+        "no pairing with this host yet"
+    };
     format!(
-        "dry run: would ConnectDevice(Address={address}, AddressType=random), Pair, Trusted on {adapter}"
-    )
-}
-
-/// Drop BlueZ's record of the pen so the next `ConnectDevice` is a first
-/// contact. `RemoveDevice` takes the object path, not the address.
-async fn remove_device(adapter_proxy: &Proxy<'_>, pen_path: &str) -> Result<(), String> {
-    let path = ObjectPath::try_from(pen_path)
-        .map_err(|error| format!("pen object path {pen_path}: {error}"))?;
-    let removed: zbus::Result<()> = adapter_proxy.call("RemoveDevice", &(path,)).await;
-    removed.map_err(|error| format!("RemoveDevice({pen_path}): {error}"))
-}
-
-/// True for the named BlueZ D-Bus errors, which mean "already done" rather
-/// than failure.
-fn is_bluez_error(error: &zbus::Error, names: &[&str]) -> bool {
-    matches!(error, zbus::Error::MethodError(name, _, _) if names.contains(&name.as_str()))
-}
-
-/// True when a failed `Connect` means the stored key no longer matches —
-/// as opposed to the pen being out of range or the adapter busy, which
-/// must not destroy a working bond.
-fn is_stale_bond_error(error: &zbus::Error) -> bool {
-    match error {
-        zbus::Error::MethodError(name, _, _) => is_stale_bond_name(name.as_str()),
-        _ => false,
-    }
-}
-
-fn is_stale_bond_name(name: &str) -> bool {
-    matches!(
-        name,
-        "org.bluez.Error.Failed"
-            | "org.bluez.Error.AuthenticationRejected"
-            | "org.bluez.Error.AuthenticationCanceled"
-            | "org.bluez.Error.AuthenticationFailed"
-            | "org.bluez.Error.ConnectionFailed"
-    )
-}
-
-/// True when the method simply is not there: `ConnectDevice` is only
-/// exported when bluetoothd runs with experimental interfaces enabled.
-/// FreeDesktop error names arrive through zbus as `Error::FDO`.
-fn is_unknown_method(error: &zbus::Error) -> bool {
-    matches!(
-        error,
-        zbus::Error::FDO(inner) if matches!(inner.as_ref(), fdo::Error::UnknownMethod(_))
+        "dry run ({pairing}): would send the key report, then pair the pen's advertisement with passkey 0"
     )
 }
 
@@ -542,7 +327,7 @@ fn hex_bytes(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{device_arg, dry_run_plan, is_stale_bond_name};
+    use super::{device_arg, dry_run_plan};
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_string()).collect()
@@ -567,25 +352,9 @@ mod tests {
     }
 
     #[test]
-    fn dry_run_names_the_arguments_bluez_accepts() {
-        // Assembled at runtime: the privacy gate rejects colon-hex literals.
-        let address = String::from("0A:0B:0C:0D:0E") + ":0F";
-        let plan = dry_run_plan(&address, "hci0");
-        // One property dictionary with "random" for the pen's random-static
-        // address, and the Trusted property — the spellings BlueZ checks.
-        assert!(plan.contains(&format!("Address={address}")));
-        assert!(plan.contains("AddressType=random"));
-        assert!(plan.contains("Trusted"));
-    }
-
-    #[test]
-    fn a_stale_bond_is_repaired_but_a_transit_is_not() {
-        assert!(is_stale_bond_name("org.bluez.Error.Failed"));
-        assert!(is_stale_bond_name("org.bluez.Error.AuthenticationRejected"));
-        assert!(is_stale_bond_name("org.bluez.Error.AuthenticationFailed"));
-        // These must never destroy a working bond:
-        assert!(!is_stale_bond_name("org.bluez.Error.InProgress"));
-        assert!(!is_stale_bond_name("org.bluez.Error.NotReady"));
-        assert!(!is_stale_bond_name("org.bluez.Error.AlreadyConnected"));
+    fn dry_run_says_which_case_the_announcement_is() {
+        assert!(dry_run_plan(0x01).contains("no pairing with this host"));
+        assert!(dry_run_plan(0x03).contains("has a pairing with this host"));
+        assert!(dry_run_plan(0x01).contains("passkey 0"));
     }
 }
