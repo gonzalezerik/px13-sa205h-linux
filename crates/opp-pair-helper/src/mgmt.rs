@@ -23,14 +23,20 @@ use std::time::{Duration, Instant};
 
 const AF_BLUETOOTH: libc::c_int = 31;
 const BTPROTO_HCI: libc::c_int = 1;
-const HCI_CHANNEL_CONTROL: u16 = 1;
+/// `HCI_CHANNEL_CONTROL` (3), the management channel bluetoothd itself
+/// uses. Channel 1 is `HCI_CHANNEL_USER`, exclusive raw access to one
+/// controller — never what we want.
+const HCI_CHANNEL_CONTROL: u16 = 3;
 /// `HCI_DEV_NONE`: the controller is selected per request by its index.
 const HCI_DEV_NONE: u16 = 0xffff;
 
+// Values from BlueZ lib/bluetooth/mgmt.h and doc/mgmt-api.txt.
 const MGMT_OP_PAIR_DEVICE: u16 = 0x0019;
-const MGMT_EV_COMMAND_STATUS: u16 = 0x0001;
-const MGMT_EV_COMMAND_COMPLETE: u16 = 0x0002;
-const MGMT_EV_PAIR_DEVICE: u16 = 0x000b;
+/// `struct mgmt_cp_pair_device`: `mgmt_addr_info` (6-byte address + type)
+/// plus the IO capability.
+const PAIR_DEVICE_PARAMS: u16 = 8;
+const MGMT_EV_CMD_COMPLETE: u16 = 0x0001;
+const MGMT_EV_CMD_STATUS: u16 = 0x0002;
 /// `MGMT_ADDR_LE_RANDOM`: LE random static, what the pen uses.
 const MGMT_ADDR_LE_RANDOM: u8 = 0x02;
 /// Just Works pairing: the digitizer announcing the pen is the host's
@@ -92,17 +98,17 @@ pub(crate) fn adapter_index(adapter: &str) -> Result<u16, String> {
         .ok_or_else(|| format!("not a Bluetooth adapter name: {adapter}"))
 }
 
-/// The `MGMT_OP_PAIR_DEVICE` frame: header (opcode, length, index), then
-/// the device in wire order, address type, IO capability, no options.
-fn pair_device_frame(index: u16, address: [u8; 6]) -> [u8; 15] {
-    let mut frame = [0u8; 6 + 9];
+/// The `MGMT_OP_PAIR_DEVICE` frame: `struct mgmt_hdr` (opcode, index,
+/// parameter length), then the device in wire order, its address type
+/// and the IO capability.
+fn pair_device_frame(index: u16, address: [u8; 6]) -> [u8; 14] {
+    let mut frame = [0u8; 6 + PAIR_DEVICE_PARAMS as usize];
     frame[0..2].copy_from_slice(&MGMT_OP_PAIR_DEVICE.to_le_bytes());
-    frame[2..4].copy_from_slice(&9u16.to_le_bytes());
-    frame[4..6].copy_from_slice(&index.to_le_bytes());
+    frame[2..4].copy_from_slice(&index.to_le_bytes());
+    frame[4..6].copy_from_slice(&PAIR_DEVICE_PARAMS.to_le_bytes());
     frame[6..12].copy_from_slice(&address);
     frame[12] = MGMT_ADDR_LE_RANDOM;
     frame[13] = MGMT_IO_CAP_NO_INPUT_NO_OUTPUT;
-    frame[14] = 0;
     frame
 }
 
@@ -177,21 +183,15 @@ fn open_control_socket() -> Result<ControlSocket, io::Error> {
 pub(crate) fn pair_device(index: u16, address: [u8; 6]) -> Result<(), String> {
     let socket = open_control_socket().map_err(|error| format!("mgmt control socket: {error}"))?;
     let frame = pair_device_frame(index, address);
-    let destination = SockaddrHci {
-        hci_family: AF_BLUETOOTH as libc::c_ushort,
-        hci_dev: HCI_DEV_NONE,
-        hci_channel: HCI_CHANNEL_CONTROL,
-    };
+    // The socket is bound to the control channel; the controller is in
+    // the frame header, so a plain send is the whole request.
     let sent = unsafe {
-        // SAFETY: `frame` and `destination` are sized live values and
-        // the length matches the destination's layout.
-        libc::sendto(
+        // SAFETY: `frame` is a live buffer of the given length.
+        libc::send(
             socket.0,
             frame.as_ptr().cast::<libc::c_void>(),
             frame.len(),
             0,
-            std::ptr::from_ref(&destination).cast::<libc::sockaddr>(),
-            std::mem::size_of::<SockaddrHci>() as libc::socklen_t,
         )
     };
     if sent < 0 {
@@ -233,30 +233,20 @@ fn await_pairing(fd: libc::c_int, index: u16, address: &[u8; 6]) -> Result<(), S
             if event_index != index {
                 continue;
             }
-            match opcode {
-                MGMT_EV_COMMAND_STATUS => {
-                    if let Some((MGMT_OP_PAIR_DEVICE, status)) = command_and_status(payload)
-                        && status != 0x00
-                        && status != 0x06
-                    {
-                        // 0x06 (busy) is a controller-side retry; the
-                        // final result still arrives as EV_PAIR_DEVICE.
-                        return Err(format!("pairing refused: {}", status_name(status)));
-                    }
+            // Pair Device answers with Command Complete once pairing has
+            // finished (its return parameters repeat the address), or
+            // with Command Status when the kernel refuses it outright.
+            match (opcode, command_and_status(payload)) {
+                (MGMT_EV_CMD_STATUS, Some((MGMT_OP_PAIR_DEVICE, status))) if status != 0 => {
+                    return Err(format!("pairing refused: {}", status_name(status)));
                 }
-                MGMT_EV_COMMAND_COMPLETE => {
-                    if let Some((MGMT_OP_PAIR_DEVICE, status)) = command_and_status(payload)
-                        && status != 0x00
-                    {
-                        return Err(format!("pairing failed: {}", status_name(status)));
-                    }
-                }
-                MGMT_EV_PAIR_DEVICE if payload.len() >= 8 && payload[..6] == address[..] => {
-                    let status = payload[6];
-                    if status == 0x00 {
-                        return Ok(());
-                    }
-                    return Err(format!("pairing failed: {}", status_name(status)));
+                (MGMT_EV_CMD_COMPLETE, Some((MGMT_OP_PAIR_DEVICE, status)))
+                    if payload.get(3..9) == Some(&address[..]) =>
+                {
+                    return match status {
+                        MGMT_STATUS_SUCCESS => Ok(()),
+                        _ => Err(format!("pairing failed: {}", status_name(status))),
+                    };
                 }
                 _ => {}
             }
@@ -272,31 +262,45 @@ fn next_frame(bytes: &[u8]) -> Option<(u16, u16, &[u8], &[u8])> {
         return None;
     }
     let opcode = u16::from_le_bytes(bytes[0..2].try_into().ok()?);
-    let length = u16::from_le_bytes(bytes[2..4].try_into().ok()?) as usize;
-    let index = u16::from_le_bytes(bytes[4..6].try_into().ok()?);
+    let index = u16::from_le_bytes(bytes[2..4].try_into().ok()?);
+    let length = u16::from_le_bytes(bytes[4..6].try_into().ok()?) as usize;
     let payload = bytes.get(6..6 + length)?;
     Some((opcode, index, payload, &bytes[6 + length..]))
 }
 
-/// The command opcode echoed at the front of `EV_COMMAND_STATUS` and
-/// `EV_COMMAND_COMPLETE` payloads, with its status byte.
+/// The command opcode echoed at the front of `EV_CMD_STATUS` and
+/// `EV_CMD_COMPLETE` payloads, with its status byte.
 fn command_and_status(payload: &[u8]) -> Option<(u16, u8)> {
     let opcode = u16::from_le_bytes(payload.get(0..2)?.try_into().ok()?);
     Some((opcode, *payload.get(2)?))
 }
 
-/// Kernel status codes, per the management API documentation.
+const MGMT_STATUS_SUCCESS: u8 = 0x00;
+
+/// Kernel status codes, `MGMT_STATUS_*` in mgmt.h.
 fn status_name(status: u8) -> String {
     let known = match status {
         0x00 => "success",
-        0x01 => "failed",
-        0x02 => "no resources",
-        0x03 => "timeout",
-        0x04 => "not supported",
-        0x05 => "invalid parameters",
-        0x06 => "busy",
-        0x07 => "bad device",
-        0x08 => "not connected",
+        0x01 => "unknown command",
+        0x02 => "not connected",
+        0x03 => "failed",
+        0x04 => "connect failed",
+        0x05 => "authentication failed",
+        0x06 => "not paired",
+        0x07 => "no resources",
+        0x08 => "timeout",
+        0x09 => "already connected",
+        0x0a => "busy",
+        0x0b => "rejected",
+        0x0c => "not supported",
+        0x0d => "invalid parameters",
+        0x0e => "disconnected",
+        0x0f => "not powered",
+        0x10 => "cancelled",
+        0x11 => "invalid index",
+        0x12 => "rfkilled",
+        0x13 => "already paired",
+        0x14 => "permission denied",
         _ => "unknown",
     };
     format!("{known} (0x{status:02x})")
@@ -336,14 +340,26 @@ mod tests {
 
     #[test]
     fn the_frame_is_the_documented_bytes() {
+        // struct mgmt_hdr { opcode, index, len } + mgmt_cp_pair_device.
         let frame = pair_device_frame(1, [0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0xce]);
-        assert_eq!(&frame[0..2], &MGMT_OP_PAIR_DEVICE.to_le_bytes());
-        assert_eq!(&frame[2..4], &9u16.to_le_bytes());
-        assert_eq!(&frame[4..6], &1u16.to_le_bytes());
-        assert_eq!(&frame[6..12], &[0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0xce]);
-        assert_eq!(frame[12], MGMT_ADDR_LE_RANDOM);
-        assert_eq!(frame[13], MGMT_IO_CAP_NO_INPUT_NO_OUTPUT);
-        assert_eq!(frame[14], 0);
+        assert_eq!(
+            frame,
+            [
+                0x19, 0x00, // MGMT_OP_PAIR_DEVICE
+                0x01, 0x00, // controller index
+                0x08, 0x00, // parameter length
+                0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0xce, // address, wire order
+                0x02, // BDADDR_LE_RANDOM
+                0x03, // NoInputNoOutput
+            ]
+        );
+    }
+
+    #[test]
+    fn the_control_channel_is_three() {
+        // HCI_CHANNEL_CONTROL in BlueZ lib/bluetooth/hci.h; 1 is the
+        // exclusive user channel.
+        assert_eq!(HCI_CHANNEL_CONTROL, 3);
     }
 
     #[test]
@@ -356,16 +372,21 @@ mod tests {
 
     #[test]
     fn frames_split_out_of_a_read() {
-        // One COMMAND_STATUS frame for our opcode, refused with BUSY.
-        let mut bytes = vec![0x01, 0x00, 0x03, 0x00, 0x00, 0x00];
-        bytes.extend_from_slice(&[0x19, 0x00, 0x06]);
+        // A Command Status for Pair Device on controller 1, refused with
+        // BUSY, followed by a second frame.
+        let mut bytes = vec![0x02, 0x00, 0x01, 0x00, 0x03, 0x00];
+        bytes.extend_from_slice(&[0x19, 0x00, 0x0a]);
+        bytes.extend_from_slice(&[0x0b, 0x00, 0x01, 0x00, 0x00, 0x00]);
         let (opcode, index, payload, rest) = next_frame(&bytes).expect("one frame");
-        assert_eq!(opcode, MGMT_EV_COMMAND_STATUS);
-        assert_eq!(index, 0);
+        assert_eq!(opcode, MGMT_EV_CMD_STATUS);
+        assert_eq!(index, 1);
         assert_eq!(
             command_and_status(payload),
-            Some((MGMT_OP_PAIR_DEVICE, 0x06))
+            Some((MGMT_OP_PAIR_DEVICE, 0x0a))
         );
-        assert!(rest.is_empty());
+        assert_eq!(status_name(0x0a), "busy (0x0a)");
+        let (next_opcode, _, next_payload, rest) = next_frame(rest).expect("second frame");
+        assert_eq!(next_opcode, 0x000b);
+        assert!(next_payload.is_empty() && rest.is_empty());
     }
 }
