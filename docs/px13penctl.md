@@ -42,12 +42,13 @@ One compact line:
 | `paired` | bool | `Pen1.Paired` |
 | `trusted` | bool | `Pen1.Trusted` |
 | `battery` | number or null | `Pen1.BatteryPercent`; `null` until the first reading (the wire's `-1`) |
+| `battery_detail` | object, or absent | `{"percent": number, "millivolts": number, "docked": bool}` from `Pen1.BatteryPercentPrecise`, `BatteryMillivolts` and `Docked`; `percent` and `millivolts` are absent until the first reading, and the whole object is absent when the daemon has none of the three |
 | `haptics` | object or null | `{"enabled": bool, "intensity": 0–100, "while_inking": bool, "while_interacting": bool, "ink_texture": string}`, or `null` when the pen does no haptics |
 | `capabilities` | object or null | `Pen1.Capabilities` projected to JSON; `null` only when the read failed |
 
 Capability keys follow docs/dbus.md §6 — a key that is absent means the
 pen lacks that capability: `pairing` (`"seamless-touch"` / `"manual"`),
-`battery` (`"ble-battery-service"` / `"none"`), `buttons`
+`battery` (`"ble-battery-service"` / `"none"`), `battery_detail` (`"pen-log"`), `buttons`
 (`{"barrel", "shortcut", "shortcut_gestures"}`) and `haptics`
 (`{"waveforms": [{"ordinal", "name", "duration_ms", "continuous"}]}`).
 Haptics UIs draw from `waveforms`, never from a hardcoded effect list.
@@ -55,8 +56,10 @@ Haptics UIs draw from `waveforms`, never from a hardcoded effect list.
 ### Plain-text status
 
 One line per pen — `SA205H  battery 87 %` — with `battery unknown`
-before the first battery reading, and a `  link down` suffix under
-`--all`.
+before the first battery reading, the pen's own gauge in brackets when
+the daemon has it (`SA205H  battery 78 % (78.73 %, 4105 mV)`), and a
+`  link down` suffix under `--all`, or `  on charger` for a pen asleep
+on its charger.
 
 ## `watch`
 

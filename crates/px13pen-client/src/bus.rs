@@ -13,8 +13,8 @@ use zbus::wire::{OwnedObjectPath, OwnedVariant};
 use zbus::{Connection, MatchRule, Message, MessageStream, Proxy};
 
 use crate::pen::{
-    Buttons, Capabilities, CapabilityHaptics, Haptics, Pen, Waveform, address_from_object_path,
-    battery_from_wire,
+    BatteryDetail, Buttons, Capabilities, CapabilityHaptics, Haptics, Pen, Waveform,
+    address_from_object_path, battery_from_wire,
 };
 
 const BUS_NAME: &str = "io.github.gonzalezerik.Px13Pen.Daemon1";
@@ -218,6 +218,14 @@ async fn read_pen(connection: &Connection, path: &str) -> Result<Pen, String> {
     let paired: bool = read_flag(&pen, "Paired").await?;
     let trusted: bool = read_flag(&pen, "Trusted").await?;
     let percent: i32 = pen.get_property("BatteryPercent").await.unwrap_or(-1);
+    // Added in the same major (docs/dbus.md §2): an older daemon lacks
+    // them, which reads as "no detail".
+    let precise: f64 = pen
+        .get_property("BatteryPercentPrecise")
+        .await
+        .unwrap_or(-1.0);
+    let millivolts: i32 = pen.get_property("BatteryMillivolts").await.unwrap_or(-1);
+    let docked: bool = pen.get_property("Docked").await.unwrap_or(false);
     Ok(Pen {
         path: path.to_string(),
         name,
@@ -226,6 +234,7 @@ async fn read_pen(connection: &Connection, path: &str) -> Result<Pen, String> {
         paired,
         trusted,
         battery: battery_from_wire(percent),
+        battery_detail: BatteryDetail::from_wire(precise, millivolts, docked),
         haptics: read_haptics(connection, path).await,
         capabilities: pen
             .get_property::<BTreeMap<String, OwnedVariant>>("Capabilities")
@@ -318,6 +327,7 @@ fn decode_capabilities(caps: BTreeMap<String, OwnedVariant>) -> Capabilities {
     Capabilities {
         pairing: text_of(&caps, "pairing"),
         battery: text_of(&caps, "battery"),
+        battery_detail: text_of(&caps, "battery-detail"),
         buttons,
         haptics,
     }
@@ -434,6 +444,7 @@ mod tests {
             paired: true,
             trusted: true,
             battery: None,
+            battery_detail: None,
             haptics: None,
             capabilities: None,
         };

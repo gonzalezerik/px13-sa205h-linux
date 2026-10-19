@@ -67,6 +67,7 @@ mod tests {
             paired: true,
             trusted: true,
             battery: Some(87),
+            battery_detail: None,
             haptics: None,
             capabilities: None,
         }

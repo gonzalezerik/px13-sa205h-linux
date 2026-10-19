@@ -24,6 +24,7 @@ mod pairing;
 mod presence;
 mod service;
 mod settings;
+mod telemetry;
 
 use hidapi::{DeviceInfo, HidApi};
 use px13pen_core::seamless;

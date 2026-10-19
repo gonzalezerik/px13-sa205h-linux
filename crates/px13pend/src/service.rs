@@ -33,6 +33,7 @@ use px13pen_core::seamless;
 
 use crate::ink;
 use crate::settings::{self, HapticsSettings};
+use crate::telemetry::Report;
 use zbus::fdo::{self, ManagedObjects};
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 use zbus::wire::{ObjectPath, OwnedObjectPath, OwnedVariant, Variant};
@@ -71,6 +72,9 @@ const SCAN_WINDOW: Duration = Duration::from_secs(20);
 
 /// Battery sentinel while BlueZ has not reported a level yet (docs/dbus.md §5).
 const BATTERY_UNKNOWN: i32 = -1;
+/// Sentinel for the pen-log readings while none has arrived (§5).
+const MILLIVOLTS_UNKNOWN: i32 = -1;
+const PRECISE_UNKNOWN: f64 = -1.0;
 
 /// Start the daemon. `--system` exports on the system bus instead of
 /// the session bus; BlueZ is always reached on the system bus (§1).
@@ -171,21 +175,35 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
             (false, _) => "no digitizer",
         }
     );
+    // The pen log is an extra: without it the daemon serves BlueZ's
+    // battery level as before.
+    let mut telemetry = crate::telemetry::Telemetry::new(&state.bluez, &state.adapter)
+        .await
+        .inspect_err(|error| eprintln!("pen log: {error}"))
+        .ok();
     let mut tick: u32 = 0;
     loop {
         futures_timer::Delay::new(TICK).await;
         if let Err(error) = state.drain_announcements(&daemon).await {
             eprintln!("pairing listener: {error}");
         }
+        if let Some(telemetry) = telemetry.as_mut()
+            && let Err(error) = state.apply_reports(telemetry.drain()).await
+        {
+            eprintln!("pen log: {error}");
+        }
         state.expire_scan().await;
         if state.register_due.swap(false, Ordering::SeqCst) {
             state.register_host().await;
         }
         tick = tick.wrapping_add(1);
-        if tick.is_multiple_of(SYNC_EVERY_TICKS)
-            && let Err(error) = state.sync_pens(&daemon, true).await
-        {
-            eprintln!("bluez sync: {error}");
+        if tick.is_multiple_of(SYNC_EVERY_TICKS) {
+            if let Err(error) = state.sync_pens(&daemon, true).await {
+                eprintln!("bluez sync: {error}");
+            }
+            if let Some(telemetry) = telemetry.as_mut() {
+                telemetry.sync(&state.connected_pens()).await;
+            }
         }
     }
 }
@@ -266,7 +284,16 @@ struct PenEntry {
     px13pend_path: String,
     data: Arc<Mutex<PenValues>>,
     /// The inputs `build_capabilities` saw; a change rebuilds the dict.
-    caps_shape: (bool, bool),
+    caps_shape: CapsShape,
+}
+
+/// What the capability dict is built from: a seamless-pairing digitizer,
+/// a BlueZ battery reading, a pen log that has reported a gauge reading.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct CapsShape {
+    seamless: bool,
+    battery: bool,
+    battery_detail: bool,
 }
 
 /// The mutable per-pen state behind `Pen1` and `Haptics1`. The
@@ -279,6 +306,11 @@ struct PenValues {
     paired: bool,
     trusted: bool,
     battery: i32,
+    /// From the pen log (findings/010): `-1` / `-1.0` until a reading.
+    battery_millivolts: i32,
+    battery_precise: f64,
+    /// The pen went to sleep on its charger and has not woken since.
+    docked: bool,
     capabilities: BTreeMap<String, OwnedVariant>,
 }
 
@@ -292,6 +324,9 @@ impl PenValues {
             paired: observed.paired,
             trusted: observed.trusted,
             battery: observed.battery.map(i32::from).unwrap_or(BATTERY_UNKNOWN),
+            battery_millivolts: MILLIVOLTS_UNKNOWN,
+            battery_precise: PRECISE_UNKNOWN,
+            docked: false,
             capabilities,
         }
     }
@@ -311,6 +346,11 @@ impl PenValues {
         if self.present != observed.present {
             self.present = observed.present;
             diff.present = true;
+            // On its charger the pen sleeps; a link means it was lifted.
+            if self.present && self.docked {
+                self.docked = false;
+                diff.docked = true;
+            }
         }
         if self.paired != observed.paired {
             self.paired = observed.paired;
@@ -329,6 +369,35 @@ impl PenValues {
         }
         diff
     }
+
+    /// Fold one pen-log report into the values. Readings without the
+    /// fractional state of charge only refresh the voltage.
+    fn apply_report(&mut self, report: &Report) -> Diff {
+        let mut diff = Diff::default();
+        match report {
+            Report::Gauge(gauge) => {
+                let millivolts = i32::from(gauge.millivolts);
+                if self.battery_millivolts != millivolts {
+                    self.battery_millivolts = millivolts;
+                    diff.battery_millivolts = true;
+                }
+                if let Some(centi) = gauge.percent_centi {
+                    let precise = f64::from(centi) / 100.0;
+                    if self.battery_precise != precise {
+                        self.battery_precise = precise;
+                        diff.battery_precise = true;
+                    }
+                }
+            }
+            Report::Docked => {
+                if !self.docked {
+                    self.docked = true;
+                    diff.docked = true;
+                }
+            }
+        }
+        diff
+    }
 }
 
 /// Which `Pen1` properties a scan changed; drives the change signals.
@@ -340,6 +409,9 @@ struct Diff {
     paired: bool,
     trusted: bool,
     battery: bool,
+    battery_millivolts: bool,
+    battery_precise: bool,
+    docked: bool,
     capabilities: bool,
 }
 
@@ -351,6 +423,9 @@ impl Diff {
             || self.paired
             || self.trusted
             || self.battery
+            || self.battery_millivolts
+            || self.battery_precise
+            || self.docked
             || self.capabilities
     }
 }
@@ -631,11 +706,17 @@ impl State {
                 current.retain(|_, entry| &entry.px13pend_path != px13pend_path);
             }
             for observation in &observed {
-                let shape = (self.seamless, observation.battery.is_some());
+                let mut shape = CapsShape {
+                    seamless: self.seamless,
+                    battery: observation.battery.is_some(),
+                    battery_detail: false,
+                };
                 if let Some(entry) = current.get_mut(&observation.bluez_path) {
                     let mut diff = locked(&entry.data).apply(observation);
+                    shape.battery_detail =
+                        locked(&entry.data).battery_millivolts != MILLIVOLTS_UNKNOWN;
                     if entry.caps_shape != shape {
-                        locked(&entry.data).capabilities = build_capabilities(shape.0, shape.1);
+                        locked(&entry.data).capabilities = build_capabilities(shape);
                         entry.caps_shape = shape;
                         diff.capabilities = true;
                     }
@@ -646,7 +727,7 @@ impl State {
                     let px13pend_path = pen_object_path(&observation.bluez_path);
                     let data = Arc::new(Mutex::new(PenValues::new(
                         observation,
-                        build_capabilities(shape.0, shape.1),
+                        build_capabilities(shape),
                     )));
                     installs.push((
                         px13pend_path.clone(),
@@ -722,60 +803,114 @@ impl State {
         }
 
         for (px13pend_path, diff) in updates {
-            let path = path_of(&px13pend_path)?;
-            let Ok(iface) = self
-                .connection
-                .object_server()
-                .interface::<_, Pen>(path)
-                .await
-            else {
-                continue;
-            };
-            let guard = iface.get_mut().await;
-            if diff.name {
-                guard
-                    .name_changed(iface.signal_emitter())
-                    .await
-                    .map_err(|error| format!("cannot emit Name change: {error}"))?;
-            }
-            if diff.address {
-                guard
-                    .address_changed(iface.signal_emitter())
-                    .await
-                    .map_err(|error| format!("cannot emit Address change: {error}"))?;
-            }
-            if diff.present {
-                guard
-                    .present_changed(iface.signal_emitter())
-                    .await
-                    .map_err(|error| format!("cannot emit Present change: {error}"))?;
-            }
-            if diff.paired {
-                guard
-                    .paired_changed(iface.signal_emitter())
-                    .await
-                    .map_err(|error| format!("cannot emit Paired change: {error}"))?;
-            }
-            if diff.trusted {
-                guard
-                    .trusted_changed(iface.signal_emitter())
-                    .await
-                    .map_err(|error| format!("cannot emit Trusted change: {error}"))?;
-            }
-            if diff.battery {
-                guard
-                    .battery_percent_changed(iface.signal_emitter())
-                    .await
-                    .map_err(|error| format!("cannot emit BatteryPercent change: {error}"))?;
-            }
-            if diff.capabilities {
-                guard
-                    .capabilities_changed(iface.signal_emitter())
-                    .await
-                    .map_err(|error| format!("cannot emit Capabilities change: {error}"))?;
-            }
+            self.emit_changes(&px13pend_path, &diff).await?;
         }
         Ok(())
+    }
+
+    /// Emit `PropertiesChanged` for every `Pen1` property in `diff`.
+    async fn emit_changes(&self, px13pend_path: &str, diff: &Diff) -> Result<(), String> {
+        let path = path_of(px13pend_path)?;
+        let Ok(iface) = self
+            .connection
+            .object_server()
+            .interface::<_, Pen>(path)
+            .await
+        else {
+            return Ok(());
+        };
+        let guard = iface.get_mut().await;
+        if diff.name {
+            guard
+                .name_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit Name change: {error}"))?;
+        }
+        if diff.address {
+            guard
+                .address_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit Address change: {error}"))?;
+        }
+        if diff.present {
+            guard
+                .present_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit Present change: {error}"))?;
+        }
+        if diff.paired {
+            guard
+                .paired_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit Paired change: {error}"))?;
+        }
+        if diff.trusted {
+            guard
+                .trusted_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit Trusted change: {error}"))?;
+        }
+        if diff.battery {
+            guard
+                .battery_percent_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit BatteryPercent change: {error}"))?;
+        }
+        if diff.battery_millivolts {
+            guard
+                .battery_millivolts_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit BatteryMillivolts change: {error}"))?;
+        }
+        if diff.battery_precise {
+            guard
+                .battery_percent_precise_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit BatteryPercentPrecise change: {error}"))?;
+        }
+        if diff.docked {
+            guard
+                .docked_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit Docked change: {error}"))?;
+        }
+        if diff.capabilities {
+            guard
+                .capabilities_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit Capabilities change: {error}"))?;
+        }
+        Ok(())
+    }
+
+    /// Fold pen-log reports (telemetry.rs) into the pens they came from
+    /// and announce what changed.
+    async fn apply_reports(&self, reports: Vec<(String, Report)>) -> Result<(), String> {
+        let mut changes: Vec<(String, Diff)> = Vec::new();
+        {
+            let pens = locked(&self.pens);
+            for (device, report) in &reports {
+                if let Some(entry) = pens.get(device) {
+                    let diff = locked(&entry.data).apply_report(report);
+                    if diff.any() {
+                        changes.push((entry.px13pend_path.clone(), diff));
+                    }
+                }
+            }
+        }
+        for (px13pend_path, diff) in changes {
+            self.emit_changes(&px13pend_path, &diff).await?;
+        }
+        Ok(())
+    }
+
+    /// BlueZ paths of the pens that hold a link right now.
+    fn connected_pens(&self) -> Vec<String> {
+        locked(&self.pens)
+            .iter()
+            .filter(|(_, entry)| locked(&entry.data).present)
+            .map(|(bluez_path, _)| bluez_path.clone())
+            .collect()
     }
 
     /// The pen-named devices under the adapter — the same heuristic
@@ -878,7 +1013,7 @@ fn pen_object_path(bluez_path: &str) -> String {
 /// The capability dict (docs/dbus.md §6). A missing key means the pen
 /// lacks that capability; `settings` stays absent because no supported
 /// pen stores any yet.
-fn build_capabilities(seamless: bool, has_battery: bool) -> BTreeMap<String, OwnedVariant> {
+fn build_capabilities(shape: CapsShape) -> BTreeMap<String, OwnedVariant> {
     let waveforms: Vec<(u16, String, u16, bool)> = SA205H_WAVES
         .iter()
         .map(|wave| {
@@ -902,18 +1037,25 @@ fn build_capabilities(seamless: bool, has_battery: bool) -> BTreeMap<String, Own
     let mut capabilities = BTreeMap::new();
     capabilities.insert(
         "pairing".to_string(),
-        owned(if seamless { "seamless-touch" } else { "manual" }),
+        owned(if shape.seamless {
+            "seamless-touch"
+        } else {
+            "manual"
+        }),
     );
     capabilities.insert("haptics".to_string(), owned(haptics));
     capabilities.insert("buttons".to_string(), owned(buttons));
     capabilities.insert(
         "battery".to_string(),
-        owned(if has_battery {
+        owned(if shape.battery {
             "ble-battery-service"
         } else {
             "none"
         }),
     );
+    if shape.battery_detail {
+        capabilities.insert("battery-detail".to_string(), owned("pen-log"));
+    }
     capabilities
 }
 
@@ -1115,6 +1257,27 @@ impl Pen {
     #[zbus(property)]
     fn battery_percent(&self) -> i32 {
         locked(&self.data).battery
+    }
+
+    /// Battery voltage from the pen's own log, or `-1` while none has
+    /// arrived (findings/010).
+    #[zbus(property)]
+    fn battery_millivolts(&self) -> i32 {
+        locked(&self.data).battery_millivolts
+    }
+
+    /// State of charge to a hundredth of a percent from the pen's own
+    /// fuel gauge, or `-1.0` while none has arrived.
+    #[zbus(property)]
+    fn battery_percent_precise(&self) -> f64 {
+        locked(&self.data).battery_precise
+    }
+
+    /// The pen went to sleep on its charger and has not woken since:
+    /// it is charging, out of reach of Bluetooth.
+    #[zbus(property)]
+    fn docked(&self) -> bool {
+        locked(&self.data).docked
     }
 
     /// The capability dict (docs/dbus.md §6): what this pen can do,
@@ -1372,9 +1535,17 @@ mod tests {
         );
     }
 
+    fn shape(seamless: bool, battery: bool, battery_detail: bool) -> CapsShape {
+        CapsShape {
+            seamless,
+            battery,
+            battery_detail,
+        }
+    }
+
     #[test]
     fn capability_dict_matches_the_spec_shape() {
-        let caps = build_capabilities(true, true);
+        let caps = build_capabilities(shape(true, true, false));
         assert_eq!(
             caps.get("pairing").unwrap().downcast_ref::<&str>().unwrap(),
             "seamless-touch"
@@ -1421,7 +1592,7 @@ mod tests {
 
     #[test]
     fn capability_dict_without_seamless_or_battery() {
-        let caps = build_capabilities(false, false);
+        let caps = build_capabilities(shape(false, false, false));
         assert_eq!(
             caps.get("pairing").unwrap().downcast_ref::<&str>().unwrap(),
             "manual"
@@ -1429,6 +1600,19 @@ mod tests {
         assert_eq!(
             caps.get("battery").unwrap().downcast_ref::<&str>().unwrap(),
             "none"
+        );
+    }
+
+    #[test]
+    fn battery_detail_appears_once_the_pen_log_reported() {
+        assert!(!build_capabilities(shape(true, true, false)).contains_key("battery-detail"));
+        let caps = build_capabilities(shape(true, true, true));
+        assert_eq!(
+            caps.get("battery-detail")
+                .unwrap()
+                .downcast_ref::<&str>()
+                .unwrap(),
+            "pen-log"
         );
     }
 
@@ -1464,7 +1648,7 @@ mod tests {
     #[test]
     fn apply_flags_only_real_changes_and_keeps_battery() {
         let base = observation();
-        let mut values = PenValues::new(&base, build_capabilities(true, true));
+        let mut values = PenValues::new(&base, build_capabilities(shape(true, true, false)));
         assert_eq!(values.battery, 77);
         assert!(!values.apply(&base).any());
         let mut next = base.clone();
@@ -1474,6 +1658,48 @@ mod tests {
         assert!(changed.present);
         assert!(!changed.battery);
         assert_eq!(values.battery, 77, "an absent reading keeps the last level");
+    }
+
+    #[test]
+    fn pen_log_readings_and_the_dock_fold_in() {
+        use px13pen_core::telemetry::Gauge;
+        let mut values = PenValues::new(&observation(), BTreeMap::new());
+        assert_eq!(values.battery_millivolts, MILLIVOLTS_UNKNOWN);
+        assert_eq!(values.battery_precise, PRECISE_UNKNOWN);
+        let reading = Report::Gauge(Gauge {
+            millivolts: 4070,
+            percent_centi: Some(7456),
+            microamps: -2300,
+        });
+        let diff = values.apply_report(&reading);
+        assert!(diff.battery_millivolts && diff.battery_precise);
+        assert_eq!(values.battery_millivolts, 4070);
+        assert_eq!(values.battery_precise, 74.56);
+        assert!(!values.apply_report(&reading).any());
+        // The short log line has no fraction: the precise level stays.
+        let coarse = Report::Gauge(Gauge {
+            millivolts: 4070,
+            percent_centi: None,
+            microamps: -2310,
+        });
+        assert!(!values.apply_report(&coarse).any());
+        assert_eq!(values.battery_precise, 74.56);
+        assert!(values.apply_report(&Report::Docked).docked);
+        assert!(values.docked);
+    }
+
+    #[test]
+    fn a_reconnect_lifts_the_pen_off_its_charger() {
+        let mut base = observation();
+        let mut values = PenValues::new(&base, BTreeMap::new());
+        values.apply_report(&Report::Docked);
+        // Asleep on the charger: still docked.
+        assert!(!values.apply(&base).docked);
+        assert!(values.docked);
+        base.present = true;
+        let diff = values.apply(&base);
+        assert!(diff.present && diff.docked);
+        assert!(!values.docked);
     }
 
     #[test]

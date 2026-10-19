@@ -53,22 +53,50 @@ pub fn event_line(event: &Event) -> String {
     line
 }
 
-/// The text form of `status`: `name  battery 87 %`. The link is spelled
-/// out only when the pen is away — the default view only ever shows
-/// present pens, so the suffix appears together with `--all`.
+/// The text form of `status`: `name  battery 87 %`, with the pen's own
+/// gauge in brackets when the daemon has it. The link is spelled out
+/// only when the pen is away — the default view only ever shows present
+/// pens, so the suffix appears together with `--all`; a pen asleep on
+/// its charger says so instead.
 pub fn status_line(pen: &Pen) -> String {
     let battery = match pen.battery {
         Some(percent) => format!("battery {percent} %"),
         None => "battery unknown".to_string(),
     };
-    let link = if pen.present { "" } else { "  link down" };
-    format!("{}  {battery}{link}", pen.name)
+    let detail = pen
+        .battery_detail
+        .as_ref()
+        .map(|detail| {
+            let mut parts = Vec::new();
+            if let Some(percent) = detail.percent {
+                parts.push(format!("{percent:.2} %"));
+            }
+            if let Some(millivolts) = detail.millivolts {
+                parts.push(format!("{millivolts} mV"));
+            }
+            if parts.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", parts.join(", "))
+            }
+        })
+        .unwrap_or_default();
+    let docked = pen
+        .battery_detail
+        .as_ref()
+        .is_some_and(|detail| detail.docked);
+    let link = match (pen.present, docked) {
+        (true, _) => "",
+        (false, true) => "  on charger",
+        (false, false) => "  link down",
+    };
+    format!("{}  {battery}{detail}{link}", pen.name)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use px13pen_client::{Capabilities, CapabilityHaptics, Waveform};
+    use px13pen_client::{BatteryDetail, Capabilities, CapabilityHaptics, Waveform};
 
     fn pen(suffix: &str, present: bool, battery: Option<i32>) -> Pen {
         Pen {
@@ -79,6 +107,7 @@ mod tests {
             paired: true,
             trusted: true,
             battery,
+            battery_detail: None,
             haptics: None,
             capabilities: None,
         }
@@ -182,5 +211,31 @@ mod tests {
             status_line(&pen("0a_0b_0c_0d_0e_0f", false, None)),
             "SA205H  battery unknown  link down"
         );
+    }
+
+    #[test]
+    fn text_status_shows_the_pen_gauge_and_the_charger() {
+        let mut awake = pen("0a_0b_0c_0d_0e_0f", true, Some(78));
+        awake.battery_detail = BatteryDetail::from_wire(78.73, 4105, false);
+        assert_eq!(
+            status_line(&awake),
+            "SA205H  battery 78 % (78.73 %, 4105 mV)"
+        );
+        let mut asleep = pen("0a_0b_0c_0d_0e_0f", false, Some(78));
+        asleep.battery_detail = BatteryDetail::from_wire(78.3, 4105, true);
+        assert_eq!(
+            status_line(&asleep),
+            "SA205H  battery 78 % (78.30 %, 4105 mV)  on charger"
+        );
+        let value = parse(&status_json(&[awake]).expect("one pen"));
+        assert_eq!(value["pens"][0]["battery_detail"]["millivolts"], 4105);
+        assert_eq!(value["pens"][0]["battery_detail"]["docked"], false);
+    }
+
+    #[test]
+    fn no_detail_means_no_key() {
+        let value =
+            parse(&status_json(&[pen("0a_0b_0c_0d_0e_0f", true, Some(87))]).expect("one pen"));
+        assert!(value["pens"][0].get("battery_detail").is_none());
     }
 }

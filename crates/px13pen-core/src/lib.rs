@@ -6,6 +6,7 @@
 
 pub mod haptics;
 pub mod seamless;
+pub mod telemetry;
 
 /// A USB-IF vendor/product pair identifying a HID device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

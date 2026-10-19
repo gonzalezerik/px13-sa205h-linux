@@ -93,10 +93,17 @@ bond, and the first failure of a streak, raises a desktop notification
 | `Paired` | `b` | BlueZ reports the device as paired |
 | `Trusted` | `b` | BlueZ trust flag (needed for reconnects without asking) |
 | `BatteryPercent` | `i` | 0–100, or `-1` while no reading has arrived |
+| `BatteryPercentPrecise` | `d` | state of charge to a hundredth of a percent from the pen's own fuel gauge, or `-1.0` while none has arrived. Only on pens with the `battery-detail` capability. |
+| `BatteryMillivolts` | `i` | battery voltage from the same source, or `-1` |
+| `Docked` | `b` | the pen went to sleep on its charger and has not connected since: it is charging, out of Bluetooth's reach. Cleared on the next connect. Always `false` without `battery-detail`. |
 | `Capabilities` | `a{sv}` | the capability dict, §6 |
 
 Every property change emits standard `org.freedesktop.DBus.Properties.PropertiesChanged`;
 there are no custom changed-signals.
+
+`BatteryPercentPrecise`, `BatteryMillivolts` and `Docked` were added within v1 (§2): the daemon
+reads them from the pen's firmware log (findings/010), which it subscribes to on every connect
+and never writes to. `BatteryPercent` stays the battery service's value.
 
 ## 6. The capability schema
 
@@ -110,6 +117,7 @@ ignored.
 | `haptics` | `a{sv}` | present when the pen plays haptics. `waveforms`: `a(qsqb)` — `(ordinal, name, duration_ms, continuous)` for each playable waveform. Continuous waveforms are felt only while the tip is in contact (the pen auto-triggers them from the tip switch, findings/006 §4). |
 | `buttons` | `a{sv}` | `barrel`: `b` — the barrel switch, reported in-band by the digitizer, not over Bluetooth; `shortcut`: `b` — the top-end button over Bluetooth; `shortcut-gestures`: `as` — the gestures the pen itself distinguishes, from `"single"`, `"double"`, `"long"` (findings/006 §5: the pen classifies them, the host must not re-time) |
 | `battery` | `s` | `"ble-battery-service"` — the standard Bluetooth battery service, also visible in UPower without this daemon; `"none"` |
+| `battery-detail` | `s` | `"pen-log"` — the pen's firmware log feeds `BatteryPercentPrecise`, `BatteryMillivolts` and `Docked` (findings/010). Appears once the log has delivered its first reading. |
 | `settings` | `a{sv}` | settings stored **in the pen** (as opposed to host policy). None today on supported pens, so the key is absent; keys will be added when a pen with stored settings is supported. |
 
 For the first supported pen (SA205H-class), `waveforms` carries:

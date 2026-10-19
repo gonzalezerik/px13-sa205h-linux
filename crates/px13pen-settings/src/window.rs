@@ -606,6 +606,7 @@ mod tests {
             paired: true,
             trusted: true,
             battery: None,
+            battery_detail: None,
             haptics: None,
             capabilities: None,
         }

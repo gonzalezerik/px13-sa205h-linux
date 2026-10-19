@@ -17,8 +17,41 @@ pub struct Pen {
     pub paired: bool,
     pub trusted: bool,
     pub battery: Option<i32>,
+    /// The pen's own fuel gauge and dock state (findings/010); absent
+    /// when the daemon has nothing beyond the battery service.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub battery_detail: Option<BatteryDetail>,
     pub haptics: Option<Haptics>,
     pub capabilities: Option<Capabilities>,
+}
+
+/// What the pen's own log adds to the battery level.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct BatteryDetail {
+    /// State of charge to a hundredth of a percent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub millivolts: Option<i32>,
+    /// Asleep on its charger since the last link.
+    pub docked: bool,
+}
+
+impl BatteryDetail {
+    /// From the wire values (`-1` / `-1.0` = no reading); `None` when
+    /// there is nothing to say, as from a daemon without the pen log.
+    pub fn from_wire(percent: f64, millivolts: i32, docked: bool) -> Option<Self> {
+        let percent = (percent >= 0.0).then_some(percent);
+        let millivolts = (millivolts >= 0).then_some(millivolts);
+        if percent.is_none() && millivolts.is_none() && !docked {
+            return None;
+        }
+        Some(BatteryDetail {
+            percent,
+            millivolts,
+            docked,
+        })
+    }
 }
 
 /// The pen's `Haptics1` policy state; `None` when the pen does no haptics.
@@ -46,6 +79,8 @@ pub struct Capabilities {
     pub pairing: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub battery: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub battery_detail: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub buttons: Option<Buttons>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -109,6 +144,16 @@ pub fn address_from_object_path(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn battery_detail_needs_something_to_say() {
+        assert_eq!(BatteryDetail::from_wire(-1.0, -1, false), None);
+        let detail = BatteryDetail::from_wire(78.73, 4105, false).unwrap();
+        assert_eq!(detail.percent, Some(78.73));
+        assert_eq!(detail.millivolts, Some(4105));
+        let docked = BatteryDetail::from_wire(-1.0, -1, true).unwrap();
+        assert!(docked.docked && docked.percent.is_none());
+    }
 
     #[test]
     fn battery_minus_one_becomes_none() {
