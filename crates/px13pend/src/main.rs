@@ -7,7 +7,8 @@
 //! through BlueZ with the daemon's own agent (`pairing.rs`). `pairing-state`
 //! reads the digitizer's capability report. `watch-pen` follows battery and
 //! link state through BlueZ; `watch-buttons` dumps the pen's raw evdev
-//! events so the top-button codes can be identified. `haptic` plays one
+//! events so the top-button codes can be identified. `pen-log` prints the
+//! pen's firmware debug log (findings/010) live. `haptic` plays one
 //! effect with the single output report 0x41 and writes nothing unless
 //! `--send` is given. `serve` exports the D-Bus interface of docs/dbus.md:
 //! a Daemon object, one object per pen BlueZ knows, and the pairing
@@ -21,6 +22,7 @@ mod buttons;
 mod haptics;
 mod ink;
 mod pairing;
+mod penlog;
 mod presence;
 mod service;
 mod settings;
@@ -58,6 +60,10 @@ commands:
   watch-buttons       dump raw evdev events from the pen's input node,
                       to identify what the top-button report becomes
       --list          list pen-named evdev nodes and exit
+  pen-log             print the pen's firmware debug log live, one
+                      timestamped record per line; read-only, runs
+                      beside a running serve
+      --adapter NAME  BlueZ adapter to use (default: hci0)
   haptic EFFECT       play one haptic effect on the paired pen (single
                       output report 0x41; without --send only the exact
                       bytes are printed)
@@ -97,6 +103,10 @@ fn main() -> ExitCode {
             (Err(message), _) | (_, Err(message)) => Err(message),
         },
         Some("watch-buttons") => buttons::watch_buttons(args.iter().any(|arg| arg == "--list")),
+        Some("pen-log") => match adapter_name(&args) {
+            Ok(adapter) => penlog::pen_log(&adapter),
+            Err(message) => Err(message),
+        },
         Some("haptic") => haptics::haptic(&args),
         Some("serve") => service::serve(&args),
         Some("-h") | Some("--help") => {

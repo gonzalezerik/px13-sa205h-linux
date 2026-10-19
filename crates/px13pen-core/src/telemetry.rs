@@ -61,22 +61,37 @@ impl LogReader {
 
     /// Feed one notification; returns the events it completed.
     pub fn push(&mut self, chunk: &[u8]) -> Vec<Event> {
+        self.push_lines(chunk)
+            .into_iter()
+            .filter_map(|line| parse_record(&line))
+            .collect()
+    }
+
+    /// Feed one notification; returns the records it completed as the pen
+    /// logged them (whitespace trimmed), including records no rule parses.
+    /// Records that arrive without a line ending (`PEN ENTER SLEEP`) count
+    /// as complete when the whole buffer parses as one; a fragment such as
+    /// `"<i> : "` is kept for the next notification.
+    pub fn push_lines(&mut self, chunk: &[u8]) -> Vec<String> {
         self.pending.push_str(&String::from_utf8_lossy(chunk));
-        let mut events = Vec::new();
+        let mut lines = Vec::new();
         while let Some(end) = self.pending.find('\n') {
             let line: String = self.pending.drain(..=end).collect();
-            events.extend(parse_record(&line));
+            let line = line.trim();
+            if !line.is_empty() {
+                lines.push(line.to_string());
+            }
         }
         // Records without a newline arrive as one whole notification;
         // a fragment such as "<i> : " is kept for the next one.
-        if let Some(event) = parse_record(&self.pending) {
-            events.push(event);
+        if parse_record(&self.pending).is_some() {
+            lines.push(self.pending.trim().to_string());
             self.pending.clear();
         }
         if self.pending.len() > MAX_PENDING {
             self.pending.clear();
         }
-        events
+        lines
     }
 
     /// Forget a partial record, e.g. when the link drops.
@@ -218,6 +233,32 @@ mod tests {
                 }),
                 Event::Sleep,
             ]
+        );
+    }
+
+    #[test]
+    fn push_lines_returns_the_records_as_logged() {
+        let mut reader = LogReader::new();
+        let mut lines: Vec<String> = Vec::new();
+        for chunk in CYCLE {
+            lines.extend(reader.push_lines(chunk));
+        }
+        assert_eq!(
+            lines,
+            vec![
+                "<i> : [bat meter] adc 4080 vbat 4070mV ocv 82% soc 74.56% t 1.0s i -2.3 -2.3mA",
+                "vbat1 = 4070 v2 = 4080, soc = 74, i_bat = -2310",
+            ]
+        );
+        // A record without a line ending arrives whole and is returned at once.
+        assert_eq!(
+            reader.push_lines(b"PEN ENTER SLEEP"),
+            vec!["PEN ENTER SLEEP".to_string()]
+        );
+        // Records no rule parses are lines too — the IMU counter included.
+        assert_eq!(
+            reader.push_lines(b"imu int cnt = 85800\r\n"),
+            vec!["imu int cnt = 85800".to_string()]
         );
     }
 
