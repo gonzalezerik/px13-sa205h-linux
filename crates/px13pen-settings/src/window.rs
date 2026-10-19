@@ -85,9 +85,12 @@ impl PenCard {
                 scale.update_property(&[gtk::accessible::Property::Label("Haptic intensity")]);
                 let row = adw::ActionRow::builder()
                     .title("Intensity")
-                    .child(&scale)
                     .sensitive(on)
                     .build();
+                // add_suffix, not the builder's .child(): that sets the
+                // ListBoxRow child and would replace the row's own layout,
+                // title included.
+                row.add_suffix(&scale);
                 let syncing = Rc::clone(syncing);
                 let pending = Rc::clone(&pending);
                 scale.connect_value_changed(move |scale| {
