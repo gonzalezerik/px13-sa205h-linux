@@ -95,7 +95,7 @@ bond, and the first failure of a streak, raises a desktop notification
 | `BatteryPercent` | `i` | 0–100, or `-1` while no reading has arrived |
 | `BatteryPercentPrecise` | `d` | state of charge to a hundredth of a percent from the pen's own fuel gauge, or `-1.0` while none has arrived. Only on pens with the `battery-detail` capability. |
 | `BatteryMillivolts` | `i` | battery voltage from the same source, or `-1` |
-| `Docked` | `b` | the pen went to sleep on its charger and has not connected since: it is charging, out of Bluetooth's reach. Cleared on the next connect. Always `false` without `battery-detail`. |
+| `Docked` | `b` | the pen went to sleep on its charger and has not connected since: it is charging, out of Bluetooth's reach. Read from the log as: a `Charge State:` line, a fuel-gauge sample in the moment before sleep showing the battery no longer discharging, then sleep within 3 s of the line — the line alone also precedes an off-charger sleep, and the text never says "Charging" (findings/010 §3). Cleared on the next connect. Always `false` without `battery-detail`. |
 | `Capabilities` | `a{sv}` | the capability dict, §6 |
 
 Every property change emits standard `org.freedesktop.DBus.Properties.PropertiesChanged`;

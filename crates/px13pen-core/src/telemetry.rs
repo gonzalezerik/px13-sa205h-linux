@@ -25,8 +25,9 @@ const MAX_PENDING: usize = 512;
 pub enum Event {
     /// A fuel-gauge reading.
     Gauge(Gauge),
-    /// `Charge State: <state>` — logged when the pen is set on its
-    /// charger, right before it sleeps (findings/010 §3).
+    /// `Charge State: <state>` — logged right before sleep, on the
+    /// charger and off it alike; captures only ever show "Not Charging"
+    /// (findings/010 §3, §4).
     ChargeState(String),
     /// `PEN ENTER SLEEP` — the pen is about to drop the link.
     Sleep,

@@ -29,7 +29,7 @@ const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
 
 /// A sleep this soon after a `Charge State:` line is the pen being set on
-/// its charger (findings/010 §3: 0.2 s apart in every capture).
+/// its charger (findings/010 §3: at most 0.3 s apart in every capture).
 const DOCK_WINDOW: Duration = Duration::from_secs(3);
 /// Notifications queued between ticks; the log runs at a few per second.
 const QUEUE: usize = 256;
@@ -48,6 +48,12 @@ struct Feed {
     device: String,
     reader: LogReader,
     charge_state_at: Option<Instant>,
+    /// A gauge sample inside the dock window showed the battery no longer
+    /// discharging: the charger has taken over (findings/010 §3). The
+    /// `Charge State:` line alone does not mean a dock — a pen put to
+    /// sleep off its charger logs the same line, and still draws current
+    /// (findings/010 §4).
+    charger_seen: bool,
 }
 
 impl Feed {
@@ -56,6 +62,7 @@ impl Feed {
             device: device.to_string(),
             reader: LogReader::new(),
             charge_state_at: None,
+            charger_seen: false,
         }
     }
 
@@ -64,14 +71,28 @@ impl Feed {
         let mut reports = Vec::new();
         for event in self.reader.push(chunk) {
             match event {
-                Event::Gauge(gauge) => reports.push(Report::Gauge(gauge)),
-                Event::ChargeState(_) => self.charge_state_at = Some(now),
+                Event::Gauge(gauge) => {
+                    if gauge.microamps >= 0
+                        && self
+                            .charge_state_at
+                            .is_some_and(|at| now.duration_since(at) <= DOCK_WINDOW)
+                    {
+                        self.charger_seen = true;
+                    }
+                    reports.push(Report::Gauge(gauge));
+                }
+                Event::ChargeState(_) => {
+                    self.charge_state_at = Some(now);
+                    self.charger_seen = false;
+                }
                 Event::Sleep => {
-                    if self
+                    let docked = self
                         .charge_state_at
                         .take()
                         .is_some_and(|at| now.duration_since(at) <= DOCK_WINDOW)
-                    {
+                        && self.charger_seen;
+                    self.charger_seen = false;
+                    if docked {
                         reports.push(Report::Docked);
                     }
                 }
@@ -229,12 +250,54 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_charge_state_then_sleep_is_a_dock() {
+    fn a_charge_state_sleep_and_stopped_current_is_a_dock() {
         let mut feed = Feed::new("/org/bluez/hci0/dev_01");
         let start = Instant::now();
         assert!(feed.push(b"Charge State: Not Charging", start).is_empty());
-        let reports = feed.push(b"PEN ENTER SLEEP", start + Duration::from_millis(200));
+        let gauge = feed.push(
+            b"vbat1 = 4191 v2 = 4201, soc = 84, i_bat = 0",
+            start + Duration::from_millis(150),
+        );
+        assert_eq!(gauge.len(), 1);
+        let reports = feed.push(b"PEN ENTER SLEEP", start + Duration::from_millis(300));
         assert_eq!(reports, vec![Report::Docked]);
+    }
+
+    #[test]
+    fn a_charging_current_also_marks_a_dock() {
+        let mut feed = Feed::new("/org/bluez/hci0/dev_01");
+        let start = Instant::now();
+        feed.push(b"Charge State: Not Charging", start);
+        feed.push(
+            b"vbat1 = 4191 v2 = 4201, soc = 84, i_bat = 55000",
+            start + Duration::from_millis(150),
+        );
+        let reports = feed.push(b"PEN ENTER SLEEP", start + Duration::from_millis(300));
+        assert_eq!(reports, vec![Report::Docked]);
+    }
+
+    #[test]
+    fn a_sleep_while_still_discharging_is_not_a_dock() {
+        // A pen put to sleep off its charger logs the same Charge State
+        // line and keeps drawing current (findings/010 §4).
+        let mut feed = Feed::new("/org/bluez/hci0/dev_01");
+        let start = Instant::now();
+        feed.push(b"Charge State: Not Charging", start);
+        feed.push(
+            b"vbat1 = 4183 v2 = 4190, soc = 84, i_bat = -2310",
+            start + Duration::from_millis(150),
+        );
+        let reports = feed.push(b"PEN ENTER SLEEP", start + Duration::from_millis(300));
+        assert!(reports.is_empty());
+    }
+
+    #[test]
+    fn stopped_current_without_a_charge_state_is_not_a_dock() {
+        let mut feed = Feed::new("/org/bluez/hci0/dev_01");
+        let start = Instant::now();
+        feed.push(b"vbat1 = 4191 v2 = 4201, soc = 84, i_bat = 0", start);
+        let reports = feed.push(b"PEN ENTER SLEEP", start + Duration::from_millis(300));
+        assert!(reports.is_empty());
     }
 
     #[test]
