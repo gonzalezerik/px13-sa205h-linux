@@ -8,6 +8,10 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      # The wiki sources and the accessibility checker, as minimal store
+      # trees (mkdocs resolves pages/ relative to its config file).
+      wikiSrc = pkgs: pkgs.lib.fileset.toSource { root = ./.; fileset = ./docs/wiki; };
+      a11ySrc = pkgs: pkgs.lib.fileset.toSource { root = ./.; fileset = ./tools/a11y/wiki; };
     in
     {
       # glibc build. musl is built natively in Alpine (container/Containerfile.musl):
@@ -15,6 +19,16 @@
       # compile rustc first. CI treats both the same (see docs/decisions.md).
       packages = forAll (pkgs: {
         default = pkgs.callPackage ./nix/package.nix { };
+
+        # The wiki (docs/wiki): a static site from Markdown, served by any
+        # file host. Every page must pass the accessibility check below
+        # before it ships.
+        wiki = pkgs.runCommand "px13-sa205h-wiki" {
+          nativeBuildInputs = [ (pkgs.callPackage ./nix/wiki.nix { }) ];
+        } ''
+          export HOME="$TMPDIR"
+          mkdocs build --strict -f ${wikiSrc pkgs}/docs/wiki/mkdocs.yml --site-dir "$out"
+        '';
       });
 
       # For NixOS and any other nixpkgs consumer that prefers the package
@@ -79,7 +93,30 @@
         };
       };
 
-      checks = forAll (pkgs: { build = self.packages.${pkgs.stdenv.hostPlatform.system}.default; });
+      checks = forAll (pkgs: {
+        build = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      # nixpkgs ships Chromium for x86 only, so the headless render test
+      # can only exist on x86_64.
+      } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isx86_64 {
+          # axe-core AA over every built wiki page, rendered in light and
+          # dark. This is what keeps the wiki honest about WCAG 2.2 AA; see
+          # tools/a11y/wiki/check.py.
+          wiki-a11y = pkgs.runCommand "px13-sa205h-wiki-a11y" {
+            nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.playwright ])) ];
+            PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
+            # axe-core as a hash-pinned download rather than a blob in git:
+            # the privacy scan stays readable, and the hash is the review.
+            AXE_JS = pkgs.fetchurl {
+              url = "https://unpkg.com/axe-core@4.11.0/axe.min.js";
+              hash = "sha256-6eWGPDOodPCbwBrNkjS348hxR59e74gC+lglREZebQE=";
+            };
+          } ''
+            export HOME="$TMPDIR"
+            python -I ${a11ySrc pkgs}/tools/a11y/wiki/check.py \
+              ${self.packages.${pkgs.stdenv.hostPlatform.system}.wiki}
+            touch "$out"
+          '';
+        });
 
       devShells = forAll (pkgs:
         let

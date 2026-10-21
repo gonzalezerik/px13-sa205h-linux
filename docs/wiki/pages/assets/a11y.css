@@ -1,0 +1,20 @@
+/* Accessibility adjustments on top of the Material theme.
+
+   The check in tools/a11y/wiki/ renders every page in light and dark and
+   fails on any WCAG 2.2 AA finding, so anything this file overrides has a
+   measured reason behind it. Keep one comment per rule. */
+
+/* The footer keeps its dark background in both palettes, and the theme's
+   muted footer text measures 4.47:1 against it — just under the 4.5:1 floor
+   for text this small. Nudge the two muted levels to about 7:1. */
+:root > * {
+  --md-footer-fg-color--light: #a9a9a9;
+  --md-footer-fg-color--lighter: #9b9b9b;
+}
+
+/* A link that only differs from its neighbouring text by a shade of grey is
+   not distinguishable without colour. Underline the footer links. */
+.md-copyright a,
+.md-footer-meta a {
+  text-decoration: underline;
+}

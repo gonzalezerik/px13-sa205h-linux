@@ -1,0 +1,41 @@
+# The project wiki (docs/wiki/pages) builds with:
+#   nix build .#wiki          - just the site
+#   nix flake check           - the site plus the accessibility check (tools/a11y/wiki)
+site_name: PX13 SA205H Linux — the pen, end to end
+site_description: How the ASUS Pen 3.0 and the ProArt PX13 digitizer work on Linux, and how that was found out.
+docs_dir: pages
+theme:
+  name: material
+  palette:
+    # Both palettes follow the OS preference and offer a manual toggle; the
+    # accessibility check renders the site under each one.
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - content.code.copy
+copyright: PX13 SA205H Linux — an independent project, not affiliated with ASUS
+plugins:
+  # Search ships on every page including 404; without it the page header
+  # keeps an unlabelled search toggle that the accessibility check (rightly)
+  # rejects.
+  - search
+extra_css:
+  - assets/a11y.css
+markdown_extensions:
+  - tables
+  - admonition
+  - attr_list
+  - toc:
+      permalink: true
