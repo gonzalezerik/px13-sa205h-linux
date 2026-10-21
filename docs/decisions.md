@@ -88,9 +88,8 @@ GNOME's tablet panel only lists devices that libwacom knows about. libwacom 2.20
 know the ELAN `04F3:4631` digitizer, so we'll propose a data file upstream to libwacom.
 
 This project owns pairing, haptics (on/off and intensity, shown only when the pen reports haptic
-support), the shortcut button and battery when no standard source exists. The shortcut
-button is emitted as a configurable key through uinput, so users bind it in their own
-desktop or WM shortcut settings.
+support), the shortcut button and battery when no standard source exists. *(For the shortcut
+button this entry's plan — a uinput key emitter — was superseded on 2026-10-21, below.)*
 
 ## 2026-10-18: frontends
 
@@ -144,3 +143,21 @@ everything except it; `cargo fmt` and `cargo clippy` (which never links) still
 cover its sources. The settings window ships through the Nix package and runs
 on any glibc desktop. Every other crate stays equal across all four
 combinations.
+
+## 2026-10-21: the shortcut button emits events and commands, not keys
+
+The pen classifies its own top-button gestures — single, double, long — and sends each as a
+Win+F20/F19/F18 key press over its Bluetooth keyboard collection, which the compositor reads
+as ordinary keys. The earlier plan (the 2026-10-18 entry above) had `px13pend` re-emit the gestures as
+configurable keys through uinput. The captures showed that was solving the wrong problem: the
+keys already reach the compositor; what no host could see was the *gesture* — only the pen's
+report says whether a press was single, double or long.
+
+So `px13pend` reads a copy of the pen's reports from its hidraw node — hidraw delivers to
+every reader, so the compositor's exclusive evdev grab stays untouched — and makes the
+gesture usable where keys cannot be: a `ButtonEvent` signal on the pen (docs/dbus.md §5) and
+one user-stored shell command per gesture (`Buttons1`, §8 there) that the daemon runs. No uinput,
+no grab, no race with the compositor at session start — the grab-first design loses to every
+compositor that grabs on startup and stays off the table unless a compositor-side interface
+appears. An action and a compositor-side key binding for the same gesture fire twice; the
+settings window says so, because the pen's key press is the pen's, not ours to hide.

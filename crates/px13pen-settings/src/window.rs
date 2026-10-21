@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The window. Each visible pen becomes a card; a card only offers
-//! haptics rows when `px13pend` reported a `Haptics1` interface for that
-//! pen, so a pen that does not do haptics never shows a control that
-//! cannot work.
+//! The window. Each visible pen becomes a card, and controls appear
+//! only for the interfaces `px13pend` exported for that pen — haptics
+//! rows need `Haptics1`, shortcut-button entries need `Buttons1` — so a
+//! pen never shows a control that cannot work.
 //!
 //! Widget state is written from exactly two places: the daemon events
 //! the poll drains, and the user's own edits. Edits are sent as
@@ -28,9 +28,13 @@ use crate::runtime::{self, BusHandle, Command, UiEvent};
 const POLL: Duration = Duration::from_millis(120);
 
 /// The whole window state the poll needs, one card per visible pen.
+/// A pen with the shortcut button gets a second group under its card;
+/// `button_rows` pairs each row with the gesture name the daemon uses.
 struct PenCard {
     pen: Pen,
     group: adw::PreferencesGroup,
+    button_group: Option<adw::PreferencesGroup>,
+    button_rows: Vec<(&'static str, adw::EntryRow)>,
     haptics_switch: Option<adw::SwitchRow>,
     intensity_row: Option<adw::ActionRow>,
     intensity: Option<gtk::Scale>,
@@ -170,9 +174,45 @@ impl PenCard {
             _ => None,
         };
 
+        // The shortcut button lives in its own group under the card:
+        // it edits commands, not the haptics policy above it. A pen the
+        // daemon exports no `Buttons1` for never sees fields that could
+        // not be saved.
+        let (button_group, button_rows) = match pen.buttons.as_ref() {
+            Some(actions) => {
+                let group = adw::PreferencesGroup::builder()
+                    .title("Shortcut button")
+                    .description(BUTTON_NOTE)
+                    .build();
+                let mut rows = Vec::new();
+                for (gesture, title, current) in [
+                    ("single", "Single press", &actions.single),
+                    ("double", "Double press", &actions.double),
+                    ("long", "Long press", &actions.long),
+                ] {
+                    let row = adw::EntryRow::builder().title(title).text(current).build();
+                    let bus = bus.clone();
+                    let path = pen.path.clone();
+                    row.connect_apply(move |row| {
+                        bus.send(Command::SetButtonAction {
+                            path: path.clone(),
+                            gesture,
+                            command: row.text().to_string(),
+                        });
+                    });
+                    group.add(&row);
+                    rows.push((gesture, row));
+                }
+                (Some(group), rows)
+            }
+            None => (None, Vec::new()),
+        };
+
         PenCard {
             pen,
             group,
+            button_group,
+            button_rows,
             haptics_switch,
             intensity_row,
             intensity,
@@ -220,6 +260,20 @@ impl PenCard {
                 row.set_selected(index as u32);
             }
             row.set_sensitive(on && haptics.as_ref().is_some_and(|h| h.while_inking));
+        }
+        if let Some(actions) = pen.buttons.as_ref() {
+            for (gesture, row) in &self.button_rows {
+                let current = match *gesture {
+                    "single" => &actions.single,
+                    "double" => &actions.double,
+                    _ => &actions.long,
+                };
+                // Typing wins over an echo: a row being edited is left
+                // alone, and an unchanged row is not touched at all.
+                if !row.has_focus() && row.text().as_str() != current.as_str() {
+                    row.set_text(current);
+                }
+            }
         }
         syncing.set(false);
     }
@@ -333,6 +387,9 @@ pub fn build(app: &adw::Application, system: bool) -> adw::ApplicationWindow {
                             let mut cards = cards.borrow_mut();
                             for card in cards.values() {
                                 page.remove(&card.group);
+                                if let Some(group) = &card.button_group {
+                                    page.remove(group);
+                                }
                             }
                             cards.clear();
                             for pen in pens {
@@ -348,6 +405,9 @@ pub fn build(app: &adw::Application, system: bool) -> adw::ApplicationWindow {
                         WatchEvent::Removed { path, .. } => {
                             if let Some(card) = cards.borrow_mut().remove(&path) {
                                 page.remove(&card.group);
+                                if let Some(group) = &card.button_group {
+                                    page.remove(group);
+                                }
                             }
                         }
                         WatchEvent::Changed { pen } => {
@@ -408,6 +468,9 @@ fn add_pen(
 ) {
     let card = PenCard::new(pen, bus, syncing);
     page.add(&card.group);
+    if let Some(group) = &card.button_group {
+        page.add(group);
+    }
     cards.insert(card.pen.path.clone(), card);
 }
 
@@ -532,6 +595,13 @@ fn ink_textures(pen: &Pen) -> Vec<String> {
         })
         .unwrap_or_default()
 }
+
+/// What every shortcut-button entry shares, said once as the group's
+/// description: what a command is, how it saves, and the one trap.
+const BUTTON_NOTE: &str = "A command runs when the pen's top button fires the gesture; \
+                           leave one empty to do nothing. Press Enter to save. The pen's \
+                           own Win+F18/19/20 keys still reach the desktop — bind a gesture \
+                           here or in the compositor, not both.";
 
 /// The card's one-line state under the pen name.
 fn describe(pen: &Pen) -> String {

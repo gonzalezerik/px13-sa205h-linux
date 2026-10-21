@@ -139,8 +139,13 @@ handle `0x0021`**; `HidD_SetOutputReport` (ATT Write Request) is accepted by the
   the pointer layer promotes barrel+tap to a right button, the raw digitizer bit was always there.
 - **Top ("shortcut") button**: BLE **keyboard input report `0x43`, notifications on handle
   `0x0019`**, one press+release pair per gesture — a double press is still a single pair — so the
-  **pen itself classifies single/double/long** and Windows only sees distinct key reports (payload
-  truncated in the HCI log, key codes unknown). **[VERIFIED-HW]**
+  **pen itself classifies single/double/long** and Windows only sees distinct key reports.
+  **[VERIFIED-HW]** The payload, truncated in the HCI log, was identified later on Linux: it is a
+  boot-keyboard frame once hidapi strips the report id — modifiers, reserved, key code. A press
+  is Left-GUI (`0x08`) with `F20` (`0x6f`) for a single press, `F19` (`0x6e`) for a double and
+  `F18` (`0x6d`) for a long one; the release frame is all zeroes. Read straight off the pen's own
+  hidraw node, which hands every reader its own copy even while the compositor holds the matching
+  evdev node under an exclusive grab (findings/010 §4). **[VERIFIED-HW 2026-10-21]**
 - The press-and-hold buzz on the top button is **pen-local**: no host→pen write anywhere in that
   trace. Host-commanded buzzes (snap ticks) and pen-local buzzes are distinguishable this way. **[VERIFIED-HW]**
 - **Battery**: notifications on handle `0x0015` (observed `0x50`, `0x4F`, `0x4D` = 80/79/77 %).

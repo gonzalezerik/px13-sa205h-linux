@@ -11,11 +11,33 @@ use px13pen_client::{Client, WatchEvent};
 
 /// What the window asks the daemon to do.
 pub enum Command {
-    SetHapticsEnabled { path: String, enabled: bool },
-    SetIntensity { path: String, intensity: u8 },
-    SetWhileInking { path: String, on: bool },
-    SetWhileInteracting { path: String, on: bool },
-    SetInkTexture { path: String, texture: String },
+    SetHapticsEnabled {
+        path: String,
+        enabled: bool,
+    },
+    SetIntensity {
+        path: String,
+        intensity: u8,
+    },
+    SetWhileInking {
+        path: String,
+        on: bool,
+    },
+    SetWhileInteracting {
+        path: String,
+        on: bool,
+    },
+    SetInkTexture {
+        path: String,
+        texture: String,
+    },
+    /// One shortcut-button gesture's command; `gesture` is one of the
+    /// names the daemon's `ButtonEvent` signal carries.
+    SetButtonAction {
+        path: String,
+        gesture: &'static str,
+        command: String,
+    },
     StartPairing,
     StopPairing,
 }
@@ -112,6 +134,11 @@ async fn pump(client: &Client, commands: &Receiver<Command>, events: &Sender<UiE
             Command::SetInkTexture { path, texture } => {
                 client.set_ink_texture(&path, &texture).await
             }
+            Command::SetButtonAction {
+                path,
+                gesture,
+                command,
+            } => client.set_button_action(&path, gesture, &command).await,
             Command::StartPairing => client.start_pairing().await.map(|_| ()),
             Command::StopPairing => client.stop_pairing().await.map(|_| ()),
         };

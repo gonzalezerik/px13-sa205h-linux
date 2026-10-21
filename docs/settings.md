@@ -28,6 +28,15 @@ inverted). Controls the current policy cannot use are greyed out:
 everything but the master switch while haptics are off, and the
 texture picker while *While inking* is off.
 
+A pen with the top shortcut button (`Buttons1` on its object) also
+gets a **Shortcut button** card: one entry per gesture — *Single
+press*, *Double press*, *Long press* — holding the shell command that
+gesture runs, empty meaning do nothing. The command goes out when you
+press Enter in its entry. The card says what the entries share: the
+pen's own Win+F18/19/20 key press still reaches the desktop whatever
+you type here, so a gesture bound in both the compositor and this
+window fires twice — pick one side.
+
 Pairing needs no button: `px13pend` listens from the start and pairs a new
 pen as soon as it comes near the screen. `Search for pens` runs
 `StartPairing()`, which also retries pens whose pairing failed; pairing
@@ -60,6 +69,24 @@ defaults, so hand-editing is safe but pointless while a daemon is
 running — the next change overwrites the edit. Deleting the file
 resets everything to the defaults (all on, full strength) after a
 daemon restart.
+
+The shortcut button actions live beside it, in
+`px13pen/buttons.conf`: one shell command per top-button gesture,
+empty meaning do nothing.
+
+```ini
+# px13pen shortcut button actions — written by px13pend; see docs/settings.md.
+# One shell command per gesture; empty means do nothing.
+# The pen's Win+F18/19/20 always reach the compositor too.
+single=notify-send "pen button"
+double=
+long=
+```
+
+Same rules: `Buttons1` writes it, the daemon re-reads it at startup,
+and unknown keys are ignored. A command runs as `sh -c <command>`
+from the daemon's session, detached; its exit status is not reported
+back.
 
 ## Menu and desktop entry
 

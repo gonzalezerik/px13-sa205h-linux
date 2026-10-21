@@ -51,6 +51,13 @@ for file in "$src"/*.rs; do
         fi
     done
 
+    # An entry row says what you are typing into through its title.
+    for line in $(grep -n 'EntryRow::builder' "$file" | cut -d: -f1); do
+        if ! near "$file" "$line" 4 '\.title('; then
+            report "entry row without a title" "$file" "$line"
+        fi
+    done
+
     # Every window says what it is.
     if grep -q 'ApplicationWindow::new(' "$file"; then
         if ! grep -q '\.set_title(\|WindowTitle' "$file"; then

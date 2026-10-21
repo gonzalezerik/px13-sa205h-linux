@@ -44,6 +44,7 @@ One compact line:
 | `battery` | number or null | `Pen1.BatteryPercent`; `null` until the first reading (the wire's `-1`) |
 | `battery_detail` | object, or absent | `{"percent": number, "millivolts": number, "docked": bool}` from `Pen1.BatteryPercentPrecise`, `BatteryMillivolts` and `Docked`; `percent` and `millivolts` are absent until the first reading, and the whole object is absent when the daemon has none of the three |
 | `haptics` | object or null | `{"enabled": bool, "intensity": 0–100, "while_inking": bool, "while_interacting": bool, "ink_texture": string}`, or `null` when the pen does no haptics |
+| `buttons` | object, or absent | `{"single": string, "double": string, "long": string}` — the configured shortcut-button commands from `Buttons1` (empty = do nothing); absent when the pen has no shortcut button |
 | `capabilities` | object or null | `Pen1.Capabilities` projected to JSON; `null` only when the read failed |
 
 Capability keys follow docs/dbus.md §6 — a key that is absent means the
@@ -74,6 +75,7 @@ $ px13penctl watch
 [  13.0 s] paired: XX:XX:XX:XX:XX:XX
 [  13.1 s] pen added: SA205H  battery unknown  connected
 [  14.6 s] SA205H  battery 87 %  connected
+[  21.2 s] top button single: XX:XX:XX:XX:XX:XX
 ```
 
 That wording may change; scripts read `--json`.
@@ -96,6 +98,7 @@ change:
 | `{"type":"pen.added","pen":{<pen>}}` | a pen object appeared |
 | `{"type":"pen.changed","pen":{<pen>}}` | a full re-read of the pen after any property change |
 | `{"type":"pen.removed","path":"…","address":"…"}` | the pen object is gone; `address` is rebuilt from `path` and empty when the path carried none |
+| `{"type":"pen.button","path":"…","gesture":"…"}` | the top shortcut button fired; `gesture` is one of the pen's `shortcut_gestures` (`single` / `double` / `long`, docs/dbus.md §5). The pen is present by definition, so `path` is enough to find it. |
 | `{"type":"pairing","kind":"…","detail":"…"}` | pairing progress, `kind` one of `announced` / `bonded` / `failed` (docs/dbus.md §4) |
 
 `pen.added` and `pen.changed` carry the complete pen every time:
@@ -108,7 +111,7 @@ connection — restart it to follow a restarted `px13pend`.
 A pen object in full (address redacted):
 
 ```json
-{"type":"pen.changed","pen":{"path":"/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05","name":"SA205H","address":"XX:XX:XX:XX:XX:XX","present":true,"paired":true,"trusted":true,"battery":87,"haptics":{"enabled":true,"intensity":100,"while_inking":true,"while_interacting":true,"ink_texture":"ink"},"capabilities":{"pairing":"seamless-touch","battery":"ble-battery-service","buttons":{"barrel":true,"shortcut":true,"shortcut_gestures":["single","double","long"]},"haptics":{"waveforms":[{"ordinal":3,"name":"click","duration_ms":45,"continuous":false}]}}}}
+{"type":"pen.changed","pen":{"path":"/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05","name":"SA205H","address":"XX:XX:XX:XX:XX:XX","present":true,"paired":true,"trusted":true,"battery":87,"haptics":{"enabled":true,"intensity":100,"while_inking":true,"while_interacting":true,"ink_texture":"ink"},"buttons":{"single":"","double":"","long":""},"capabilities":{"pairing":"seamless-touch","battery":"ble-battery-service","buttons":{"barrel":true,"shortcut":true,"shortcut_gestures":["single","double","long"]},"haptics":{"waveforms":[{"ordinal":3,"name":"click","duration_ms":45,"continuous":false}]}}}}
 ```
 
 ## Exit codes

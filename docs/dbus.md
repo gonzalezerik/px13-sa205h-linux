@@ -30,7 +30,7 @@ Status: **v1, implemented** by `px13pend serve` (`crates/px13pend/src/service.rs
 | Path | Interfaces | |
 |---|---|---|
 | `/io/github/gonzalezerik/Px13Pen/Daemon` | `io.github.gonzalezerik.Px13Pen.Daemon1` | one per daemon |
-| `/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05` | `io.github.gonzalezerik.Px13Pen.Pen1`, plus `io.github.gonzalezerik.Px13Pen.Haptics1` when the pen does haptics | one per known pen |
+| `/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05` | `io.github.gonzalezerik.Px13Pen.Pen1`, plus `io.github.gonzalezerik.Px13Pen.Haptics1` when the pen does haptics and `io.github.gonzalezerik.Px13Pen.Buttons1` when it has the shortcut button | one per known pen |
 
 Pen object paths embed the Bluetooth address in the BlueZ style: `dev_` followed by the
 six address bytes in lower-case hex, underscore-separated.
@@ -105,6 +105,12 @@ there are no custom changed-signals.
 reads them from the pen's firmware log (findings/010), which it subscribes to on every connect
 and never writes to. `BatteryPercent` stays the battery service's value.
 
+### Signals
+
+| Signal | Args | Meaning |
+|---|---|---|
+| `ButtonEvent` | `s gesture` | the top shortcut button fired a gesture the pen itself classified — one of `buttons.shortcut-gestures` (`single`, `double`, `long`), added within v1 (§2). The daemon reads the pen's reports off its HID node beside the compositor's grab (findings/010 §4), so the gesture is seen even while the compositor holds the keyboard node. The pen's own Win+F18/19/20 press still reaches the compositor independently: a compositor-side binding and a `Buttons1` action (§8) for the same gesture fire twice. |
+
 ## 6. The capability schema
 
 `Capabilities` is the whole reason frontends don't know pen models. Keys below are the
@@ -115,7 +121,7 @@ ignored.
 |---|---|---|
 | `pairing` | `s` | `"seamless-touch"` — tip-to-screen pairing via the digitizer announcement; `"manual"` — pair like any Bluetooth device |
 | `haptics` | `a{sv}` | present when the pen plays haptics. `waveforms`: `a(qsqb)` — `(ordinal, name, duration_ms, continuous)` for each playable waveform. Continuous waveforms are felt only while the tip is in contact (the pen auto-triggers them from the tip switch, findings/006 §4). |
-| `buttons` | `a{sv}` | `barrel`: `b` — the barrel switch, reported in-band by the digitizer, not over Bluetooth; `shortcut`: `b` — the top-end button over Bluetooth; `shortcut-gestures`: `as` — the gestures the pen itself distinguishes, from `"single"`, `"double"`, `"long"` (findings/006 §5: the pen classifies them, the host must not re-time) |
+| `buttons` | `a{sv}` | `barrel`: `b` — the barrel switch, reported in-band by the digitizer, not over Bluetooth; `shortcut`: `b` — the top-end button over Bluetooth, with `ButtonEvent` on `Pen1` (§5) and the `Buttons1` interface (§8); `shortcut-gestures`: `as` — the gestures the pen itself distinguishes, from `"single"`, `"double"`, `"long"` (findings/006 §5: the pen classifies them, the host must not re-time). These are exactly the strings `ButtonEvent` carries. |
 | `battery` | `s` | `"ble-battery-service"` — the standard Bluetooth battery service, also visible in UPower without this daemon; `"none"` |
 | `battery-detail` | `s` | `"pen-log"` — the pen's firmware log feeds `BatteryPercentPrecise`, `BatteryMillivolts` and `Docked` (findings/010). Appears once the log has delivered its first reading. |
 | `settings` | `a{sv}` | settings stored **in the pen** (as opposed to host policy). None today on supported pens, so the key is absent; keys will be added when a pen with stored settings is supported. |
@@ -183,7 +189,29 @@ Policy only: these properties are what `px13pend` applies at play time and are n
 written to the pen. They persist across daemon restarts in `px13pen/haptics.conf`
 under `$XDG_CONFIG_HOME` (`~/.config` fallback) — format and keys in docs/settings.md.
 
-## 8. Errors
+## 8. `io.github.gonzalezerik.Px13Pen.Buttons1`
+
+Exported on a pen path **only when** `Capabilities` has `buttons.shortcut`. Like the haptics
+policy it is **per user, not per pen**: every pen path exports the same values, and setting
+one on any pen changes it for all of them.
+
+| Property | Type | Meaning |
+|---|---|---|
+| `Single` | `s` r/w | shell command run on a single press of the top button; empty (the default) does nothing |
+| `Double` | `s` r/w | command for a double press |
+| `Long` | `s` r/w | command for a long press |
+
+The command runs as `sh -c <command>` from the daemon's session, detached, and its exit
+status is not reported back. `ButtonEvent` (§5) fires whether or not a command is set —
+watchers see every gesture, and an action is only one possible response to it.
+
+Two things the action is **not**: it does not replace the pen's own Win+F18/19/20 press,
+which reaches the compositor as always (the pen sends it; the daemon reads a copy). A user
+who also binds those keys in the compositor sees both fire — bind one side, not both. And
+it is host policy, never a pen write: the commands persist across daemon restarts in
+`px13pen/buttons.conf` under `$XDG_CONFIG_HOME`, beside the haptics file (docs/settings.md).
+
+## 9. Errors
 
 v1 uses the standard `org.freedesktop.DBus.Error.*` names, with a stable prefix in the
 message text so clients can branch:
@@ -198,18 +226,17 @@ message text so clients can branch:
 
 `io.github.gonzalezerik.Px13Pen.Error.*` is reserved for future majors.
 
-## 9. Not in v1 (deliberately)
+## 10. Not in v1 (deliberately)
 
 - `ObjectManager` / `GetManagedObjects` on the root object.
-- Button **events**: the shortcut button's key codes are still being identified
-  (`px13pend watch-buttons`), so v1 declares the buttons capability but emits no signals;
-  the plan is a `ButtonEvent` signal on `Pen1` and a `uinput` key emitter owned by
-  `px13pend` (docs/decisions.md), which needs no interface change for the emitter itself.
+- A `Buttons1` action richer than "run this command" (haptics on gesture, per-gesture
+  delays, conditionals). The signal and the storage shape leave room; a fixed command
+  covers what the captures show Windows doing.
 - D-Bus service activation.
 - The app-facing haptics portal (xdg-desktop-portal) — a separate interface on top of
   this one, out of scope here (docs/decisions.md §scope, item 3).
 
-## 10. Trying it
+## 11. Trying it
 
 ```console
 $ px13pend serve &
