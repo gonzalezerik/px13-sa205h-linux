@@ -40,6 +40,9 @@ struct PenCard {
     while_inking: Option<adw::SwitchRow>,
     while_interacting: Option<adw::SwitchRow>,
     ink_texture: Option<adw::ComboRow>,
+    /// The daemon's status-notification switch; every pen carries the
+    /// same one, so every card shows it, haptics or not.
+    status_switch: adw::SwitchRow,
     /// The combo's texture names in order, so a selection maps back to a name.
     textures: Vec<String>,
     /// The slider's latest value, not yet sent. Flushed by the poll.
@@ -183,6 +186,20 @@ impl PenCard {
             _ => None,
         };
 
+        // Last, and the only row that is here for every pen: the
+        // daemon's word on going idle, docking and waking. The note
+        // itself names the pen; this switch is one policy for all of
+        // them, driven from any card like the haptics rows above.
+        let status_switch = toggle_row(
+            "Status notifications",
+            Some("Say when the pen goes idle, docks or wakes"),
+            pen.status_notifications,
+            true,
+            &wire,
+            |path, enabled| Command::SetStatusNotifications { path, enabled },
+        );
+        group.add(&status_switch);
+
         // The shortcut button lives in its own group under the card:
         // it edits commands, not the haptics policy above it. A pen the
         // daemon exports no `Buttons1` for never sees fields that could
@@ -237,6 +254,7 @@ impl PenCard {
             while_inking,
             while_interacting,
             ink_texture,
+            status_switch,
             textures,
             pending,
         }
@@ -279,6 +297,7 @@ impl PenCard {
             }
             row.set_sensitive(on && haptics.as_ref().is_some_and(|h| h.while_inking));
         }
+        self.status_switch.set_active(pen.status_notifications);
         if let Some(actions) = pen.buttons.as_ref() {
             for button in &self.button_rows {
                 let current = match button.gesture {
@@ -712,6 +731,7 @@ mod tests {
             battery_detail: None,
             haptics: None,
             buttons: None,
+            status_notifications: true,
             capabilities: None,
         }
     }

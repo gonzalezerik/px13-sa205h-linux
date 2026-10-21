@@ -38,6 +38,12 @@ pub enum Command {
         gesture: &'static str,
         command: String,
     },
+    /// The daemon's status-notification switch (`Notifications1`);
+    /// shared by every pen, like the haptics policy.
+    SetStatusNotifications {
+        path: String,
+        enabled: bool,
+    },
     StartPairing,
     StopPairing,
 }
@@ -139,6 +145,9 @@ async fn pump(client: &Client, commands: &Receiver<Command>, events: &Sender<UiE
                 gesture,
                 command,
             } => client.set_button_action(&path, gesture, &command).await,
+            Command::SetStatusNotifications { path, enabled } => {
+                client.set_status_notifications(&path, enabled).await
+            }
             Command::StartPairing => client.start_pairing().await.map(|_| ()),
             Command::StopPairing => client.stop_pairing().await.map(|_| ()),
         };
