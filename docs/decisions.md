@@ -250,16 +250,22 @@ a dual-boot pen bonds a fresh one per host and goes on announcing the
 identity the other host bonded, so an address-keyed daemon chases a
 pen it already has (the failed-retry loop of 2026-10-18). So:
 
-- `px13pend` reads feature `0x40` once per connected pen — one plain
-  GATT read of the characteristic whose Report Reference names that
-  feature — and remembers the serial as long as the pen is known. An
-  announcement whose serial matches a pen already paired here pairs
-  nothing, even while that pen's link is down: asleep is not gone.
+- `px13pend` reads feature `0x40` once per connected pen — a plain GATT
+  read of the identity Report characteristic (see below) — and
+  remembers the serial as long as the pen is known. An announcement
+  whose serial matches a pen already paired here pairs nothing, even
+  while that pen's link is down: asleep is not gone.
 - Announcements identity cannot place behave exactly as before: quiet
   while any pen holds a live link, seamless pairing otherwise. A
   second, genuinely different pen therefore changes nothing yet;
   multiple pens stay a future item with their own per-pen settings.
-- Reading a HID *feature* through BlueZ's HID profile had never been
-  exercised on Linux. A pen that answers nothing simply leaves the
-  daemon in the old conservative behaviour; nothing else depends on
-  the read.
+- Reading the feature is not a HID feature get. The pen exports no
+  Report Reference descriptors, so BlueZ's HID profile has no way to
+  map one and `HIDIOCGFEATURE` is rejected; `px13pend` instead reads
+  the characteristic directly, as BlueZ exports the identity report as
+  a readable HID Report characteristic (0x2A4D) with the feature's
+  bytes and nothing to say which it is. It reads them all and keeps the
+  one answer whose vendor matches — on the live pen that is a single
+  ten-byte read among six Report characteristics, the rest haptics
+  state and padding. A pen that answers nothing leaves the daemon in
+  the old conservative behaviour; nothing else depends on the read.
