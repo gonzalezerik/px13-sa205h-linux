@@ -207,6 +207,31 @@ end to end. Two model corrections came out of it:
    per tool activation, not per stroke. The 25 % intensity byte was felt and clearly weaker
    (§2.7 item 5's open perception question resolved at the low end).
 
+### 2.9 Per-effect five-field defaults — and where Windows' own values are lost [VERIFIED-HW, one negative]
+
+The captures show Windows writing; they cannot show **what** it wrote. The
+`BluetoothStack.Verbose` logger used for the session-07 and session-04 Bluetooth traces truncates
+ACL payloads to ≈11 bytes, so the haptic ATT writes are logged as handle only (`52 21 00`) — the
+six hover-tick payloads of §07 §4 and the ~125 OneNote/Paint ink payloads are **unrecoverable**.
+Windows' exact repeat/cutoff/retrigger choices per effect are therefore *labelled unknown* here,
+not guessed at.
+
+What is verified, from the maintainer's own direct-send panel (every write there was felt) and the
+pen's power-on output state:
+
+| Field | Value | Evidence |
+|---|---|---|
+| repeat | `01` — play once | every felt direct send (`41 01 …`); Windows' system-originated map already says playCount 1 (§2.4) |
+| intensity | `FF` = full, scaled down by the user's setting | §2.7 items 1–2, 5; §2.8.2 (25 % byte felt, clearly weaker) |
+| ordinal | the effect's own | §2.7 item 3 |
+| cutoff | `00` — none; the firmware's duration-list entry plays in full | every felt direct send; feature `0x41` readback has no cutoff armed |
+| retrigger | `0000` | every felt direct send; feature `0x41` readback: retrigger 0 |
+
+One row fits all thirteen effects — the panel felt click, success, error, the continuous set and
+the stop shape with exactly this shape of write, and the pen's own durations (§2.7 item 3) carry
+the per-effect character. `px13pend` uses it everywhere (`Effect::of`): the hover tick, the ink
+arming, and `PlayEffect` arguments default to it. Anything beyond this row is host invention.
+
 ## 3. What px13pend must reproduce (normative checklist)
 
 1. Read Waveform List + Duration List once per pen connection via **GET_FEATURE** (allowed:
@@ -234,5 +259,8 @@ end to end. Two model corrections came out of it:
 - Ordinal 2 (Stop) behaviour on this pen has not been exercised — the direct-send panel covered
   3/7/8/9/11 and the continuous set. [**resolved 2026-10-19** — ordinal 2 is inert, ordinal 1 is
   the stop; §2.8.1, findings/009 §3]
+- Windows' per-effect repeat/cutoff/retrigger values (§2.9) — the Bluetooth traces log the
+  handle only; recovering them needs a sniffer that captures full ATT payloads (a second adapter
+  or an embedded middleman), which no capture session has run.
 - Exact report IDs/sizes for the SA205H come from the captured descriptor
   (`fixtures/px13-hn7306/`), not from this doc.

@@ -26,7 +26,14 @@ interacting** switch (`Haptics1.WhileInteracting` — short ticks for
 clicks, presses and hovers) and an **Ink texture** picker
 (`Haptics1.InkTexture` — the continuous waveforms the pen reports,
 minus the eraser, which the daemon arms by itself when the pen is
-inverted). Controls the current policy cannot use are greyed out:
+inverted). A **Hover-out tick** switch (`Haptics1.HoverTick`) follows
+*While interacting*: one `hover` tick as the pen lifts out of the
+screen's hover range. It is **off by default** — Windows is only
+*seen* to buzz at hover-stroke ends (findings/007 §4), and the
+captured packets stopped at the handle, so what Windows actually
+sends there is unknown and this daemon will not invent it silently.
+It also needs *While interacting* on: it is an interaction tick.
+Controls the current policy cannot use are greyed out:
 everything but the master switch while haptics are off, and the
 texture picker while *While inking* is off. Every card ends with the
 **Status notifications** switch (`Notifications1.Enabled`): whether
@@ -66,6 +73,7 @@ enabled=true
 intensity=100
 while_inking=true
 while_interacting=true
+hover_tick=false
 ink_texture=ink
 ```
 
@@ -73,8 +81,8 @@ The daemon rewrites the whole file on every change and re-reads it at
 startup; unknown keys and out-of-range values fall back to the
 defaults, so hand-editing is safe but pointless while a daemon is
 running — the next change overwrites the edit. Deleting the file
-resets everything to the defaults (all on, full strength) after a
-daemon restart.
+resets everything to the defaults (all on at full strength, except
+the opt-in `hover_tick`, which starts off) after a daemon restart.
 
 The shortcut button actions live beside it, in
 `px13pen/buttons.conf`: one shell command per top-button gesture,

@@ -181,6 +181,7 @@ Windows registry values this mirrors (findings/006 §4).
 | `Intensity` | `y` r/w | default strength for `PlayEffect`/`PlayOrdinal` calls that pass the `255` sentinel; 0–100, default 100. |
 | `WhileInking` | `b` r/w | whether the tip's contact arms the ink texture. Off, continuous ordinals return `false` unwritten. Default on. |
 | `WhileInteracting` | `b` r/w | whether discrete effects (the UI ticks — `click`, `press`, `hover`, …) get through. Off, they return `false` unwritten. Default on. |
+| `HoverTick` | `b` r/w | whether the daemon plays one `hover` tick when the pen lifts out of the digitizer's range after hovering. Needs `WhileInteracting` on as well. **Default off** — the behaviour is seen on Windows at hover-stroke ends but only inferred (findings/007 §4); nothing the user triggers plays without asking. |
 | `InkTexture` | `s` r/w | which continuous texture the tip arms: one of `ink`, `pencil`, `marker`, `chisel`, `brush`, `sparkle` (default `ink`). `eraser` is not settable — the eraser end always arms the eraser texture by itself. |
 
 The two toggles gate the methods by waveform class: with `WhileInking` off, the

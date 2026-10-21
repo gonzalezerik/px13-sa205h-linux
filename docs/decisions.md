@@ -219,3 +219,22 @@ charger report (the tray sends none of its own).
 - **Silence is the user's call:** `Notifications1.Enabled`
   (`px13pen/status.conf`), default on, a switch on every settings card
   (docs/dbus.md §9, docs/settings.md).
+
+## 2026-10-21: the hover tick is opt-in, the effect defaults stay honest
+
+The captures show Windows buzzing a few frames after hover strokes end
+(findings/007 §4) — the frame correlation is solid, the causing event
+is inferred, and the Bluetooth logger truncated every payload to the
+handle, so what Windows actually sent is unknown. Two consequences:
+
+- **`Haptics1.HoverTick`, default off** (`px13pen/haptics.conf`, a
+  settings row after *While interacting*): the daemon plays one
+  `hover` tick as the pen lifts out of the digitizer's range, only
+  while the user has asked for it (and *While interacting* is on).
+  An inferred behaviour earns a switch, not a default.
+- **One honest defaults row** (docs/protocol/haptics.md §2.9): every
+  felt direct send was `repeat 1, no cutoff, no retrigger`, and the
+  pen's power-on state reads the same — `Effect::of` uses exactly
+  that for every effect, ink arming and ticks alike. Windows' own
+  per-effect values are *labelled unknown* rather than guessed: an
+  unlabeled invention is worse than a row with a gap in it.
