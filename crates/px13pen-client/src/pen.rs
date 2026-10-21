@@ -17,6 +17,10 @@ pub struct Pen {
     pub present: bool,
     pub paired: bool,
     pub trusted: bool,
+    /// The pen's own firmware string, once the daemon has read it over
+    /// GATT; absent before that (docs/dbus.md §5).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firmware: Option<String>,
     pub battery: Option<i32>,
     /// The pen's own fuel gauge and dock state (findings/010); absent
     /// when the daemon has nothing beyond the battery service.
@@ -133,6 +137,12 @@ pub fn battery_from_wire(percent: i32) -> Option<i32> {
     if percent < 0 { None } else { Some(percent) }
 }
 
+/// The wire `FirmwareRevision` as a field: the daemon reports the empty
+/// string until it has read the pen, which is no firmware to show.
+pub fn firmware_from_wire(text: String) -> Option<String> {
+    (!text.is_empty()).then_some(text)
+}
+
 /// The address embedded in a `dev_XX_XX_XX_XX_XX_XX` object path, in the
 /// `Pen1.Address` form: upper-case hex, colon-separated. Empty when the
 /// path carries no address.
@@ -175,6 +185,11 @@ mod tests {
         assert_eq!(battery_from_wire(-1), None);
         assert_eq!(battery_from_wire(0), Some(0));
         assert_eq!(battery_from_wire(100), Some(100));
+        assert_eq!(firmware_from_wire(String::new()), None);
+        assert_eq!(
+            firmware_from_wire("2.0.37".to_string()),
+            Some("2.0.37".to_string())
+        );
     }
 
     #[test]

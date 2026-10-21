@@ -58,15 +58,20 @@ pub fn event_line(event: &Event) -> String {
 }
 
 /// The text form of `status`: `name  battery 87 %`, with the pen's own
-/// gauge in brackets when the daemon has it. The link is spelled out
-/// only when the pen is away — the default view only ever shows present
-/// pens, so the suffix appears together with `--all`; a pen asleep on
-/// its charger says so instead.
+/// firmware once the daemon has read it and the pen's own gauge in
+/// brackets when it has that too. The link is spelled out only when the
+/// pen is away — the default view only ever shows present pens, so the
+/// suffix appears together with `--all`; a pen asleep on its charger
+/// says so instead.
 pub fn status_line(pen: &Pen) -> String {
     let battery = match pen.battery {
         Some(percent) => format!("battery {percent} %"),
         None => "battery unknown".to_string(),
     };
+    let firmware = pen
+        .firmware
+        .as_deref()
+        .map_or(String::new(), |text| format!("  firmware {text}"));
     let detail = pen
         .battery_detail
         .as_ref()
@@ -94,7 +99,7 @@ pub fn status_line(pen: &Pen) -> String {
         (false, true) => "  on charger",
         (false, false) => "  link down",
     };
-    format!("{}  {battery}{detail}{link}", pen.name)
+    format!("{}  {battery}{detail}{firmware}{link}", pen.name)
 }
 
 #[cfg(test)]
@@ -110,6 +115,7 @@ mod tests {
             present,
             paired: true,
             trusted: true,
+            firmware: None,
             battery,
             battery_detail: None,
             haptics: None,
@@ -149,6 +155,7 @@ mod tests {
         assert_eq!(out["capabilities"]["pairing"], "seamless-touch");
         assert!(out["capabilities"].get("buttons").is_none());
         assert!(out["haptics"].is_null());
+        assert!(out.get("firmware").is_none(), "unread: no key at all");
     }
 
     #[test]
@@ -215,6 +222,16 @@ mod tests {
         assert_eq!(
             status_line(&pen("0a_0b_0c_0d_0e_0f", false, None)),
             "SA205H  battery unknown  link down"
+        );
+    }
+
+    #[test]
+    fn text_status_shows_the_firmware_once_read() {
+        let mut sample = pen("0a_0b_0c_0d_0e_0f", false, Some(87));
+        sample.firmware = Some("2.0.37".to_string());
+        assert_eq!(
+            status_line(&sample),
+            "SA205H  battery 87 %  firmware 2.0.37  link down"
         );
     }
 

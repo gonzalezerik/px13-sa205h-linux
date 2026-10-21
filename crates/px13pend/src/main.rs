@@ -22,6 +22,7 @@ mod buttons;
 mod haptics;
 mod ink;
 mod pairing;
+mod peninfo;
 mod penlog;
 mod presence;
 mod service;

@@ -306,6 +306,10 @@ struct PenEntry {
     data: Arc<Mutex<PenValues>>,
     /// The inputs `build_capabilities` saw; a change rebuilds the dict.
     caps_shape: CapsShape,
+    /// Not before this instant will the firmware revision be read from
+    /// the pen again (a failed GATT read earns a wait, not a retry
+    /// every tick).
+    firmware_due: Instant,
 }
 
 /// What the capability dict is built from: a seamless-pairing digitizer,
@@ -332,6 +336,9 @@ struct PenValues {
     battery_precise: f64,
     /// The pen went to sleep on its charger and has not woken since.
     docked: bool,
+    /// The pen's own firmware string, read from its Device Information
+    /// service while it was connected; empty until that read succeeds.
+    firmware: String,
     capabilities: BTreeMap<String, OwnedVariant>,
 }
 
@@ -348,6 +355,7 @@ impl PenValues {
             battery_millivolts: MILLIVOLTS_UNKNOWN,
             battery_precise: PRECISE_UNKNOWN,
             docked: false,
+            firmware: String::new(),
             capabilities,
         }
     }
@@ -433,6 +441,7 @@ struct Diff {
     battery_millivolts: bool,
     battery_precise: bool,
     docked: bool,
+    firmware: bool,
     capabilities: bool,
 }
 
@@ -714,9 +723,11 @@ impl State {
     /// initial sync stays quiet because late clients call `ListPens`.
     async fn sync_pens(&self, daemon: &InterfaceRef<Daemon>, announce: bool) -> Result<(), String> {
         let observed = self.scan_pens().await?;
-        let (installs, removals, updates) = {
+        let now = Instant::now();
+        let (installs, removals, updates, firmware_reads) = {
             let mut installs: Vec<PendingInstall> = Vec::new();
             let mut updates: Vec<(String, Diff)> = Vec::new();
+            let mut firmware_reads: Vec<(String, Arc<Mutex<PenValues>>, String)> = Vec::new();
             let mut current = locked(&self.pens);
             let removals: Vec<String> = current
                 .iter()
@@ -744,6 +755,17 @@ impl State {
                     if diff.any() {
                         updates.push((entry.px13pend_path.clone(), diff));
                     }
+                    if observation.present
+                        && locked(&entry.data).firmware.is_empty()
+                        && entry.firmware_due <= now
+                    {
+                        entry.firmware_due = now + RETRY_AFTER;
+                        firmware_reads.push((
+                            observation.bluez_path.clone(),
+                            Arc::clone(&entry.data),
+                            entry.px13pend_path.clone(),
+                        ));
+                    }
                 } else {
                     let px13pend_path = pen_object_path(&observation.bluez_path);
                     let data = Arc::new(Mutex::new(PenValues::new(
@@ -757,17 +779,27 @@ impl State {
                         Arc::clone(&self.haptics),
                         Arc::clone(&self.buttons),
                     ));
+                    if observation.present {
+                        firmware_reads.push((
+                            observation.bluez_path.clone(),
+                            Arc::clone(&data),
+                            px13pend_path.clone(),
+                        ));
+                    }
                     current.insert(
                         observation.bluez_path.clone(),
                         PenEntry {
                             px13pend_path,
                             data,
                             caps_shape: shape,
+                            // Read on the next sight while present; a
+                            // miss waits out the retry from right now.
+                            firmware_due: now + RETRY_AFTER,
                         },
                     );
                 }
             }
-            (installs, removals, updates)
+            (installs, removals, updates, firmware_reads)
         };
 
         for px13pend_path in removals {
@@ -837,6 +869,36 @@ impl State {
         for (px13pend_path, diff) in updates {
             self.emit_changes(&px13pend_path, &diff).await?;
         }
+
+        // One plain GATT read per pen that still owes its firmware
+        // revision, awaited while its link is up. A pen that answers
+        // nothing keeps its quiet retry; a pen that answers never
+        // needs another read.
+        for (bluez_path, data, px13pend_path) in firmware_reads {
+            let Ok(revision) = crate::peninfo::firmware_revision(&self.bluez, &bluez_path).await
+            else {
+                continue;
+            };
+            let changed = {
+                let mut values = locked(&data);
+                if values.firmware == revision {
+                    false
+                } else {
+                    values.firmware = revision;
+                    true
+                }
+            };
+            if changed {
+                self.emit_changes(
+                    &px13pend_path,
+                    &Diff {
+                        firmware: true,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            }
+        }
         Ok(())
     }
 
@@ -905,6 +967,12 @@ impl State {
                 .docked_changed(iface.signal_emitter())
                 .await
                 .map_err(|error| format!("cannot emit Docked change: {error}"))?;
+        }
+        if diff.firmware {
+            guard
+                .firmware_revision_changed(iface.signal_emitter())
+                .await
+                .map_err(|error| format!("cannot emit FirmwareRevision change: {error}"))?;
         }
         if diff.capabilities {
             guard
@@ -1386,6 +1454,14 @@ impl Pen {
     #[zbus(property)]
     fn docked(&self) -> bool {
         locked(&self.data).docked
+    }
+
+    /// The pen's firmware string, read from its own Device Information
+    /// service while it was connected; empty until that read has
+    /// succeeded (docs/dbus.md §5).
+    #[zbus(property)]
+    fn firmware_revision(&self) -> String {
+        locked(&self.data).firmware.clone()
     }
 
     /// The capability dict (docs/dbus.md §6): what this pen can do,

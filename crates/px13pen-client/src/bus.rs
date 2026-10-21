@@ -14,7 +14,7 @@ use zbus::{Connection, MatchRule, Message, MessageStream, Proxy};
 
 use crate::pen::{
     BatteryDetail, ButtonActions, Buttons, Capabilities, CapabilityHaptics, Haptics, Pen, Waveform,
-    address_from_object_path, battery_from_wire,
+    address_from_object_path, battery_from_wire, firmware_from_wire,
 };
 
 const BUS_NAME: &str = "io.github.gonzalezerik.Px13Pen.Daemon1";
@@ -257,6 +257,12 @@ async fn read_pen(connection: &Connection, path: &str) -> Result<Pen, String> {
         .unwrap_or(-1.0);
     let millivolts: i32 = pen.get_property("BatteryMillivolts").await.unwrap_or(-1);
     let docked: bool = pen.get_property("Docked").await.unwrap_or(false);
+    // Added in the same major (docs/dbus.md §2): an older daemon lacks
+    // it, and an unread pen reports it empty; both mean "no firmware".
+    let firmware: String = pen
+        .get_property("FirmwareRevision")
+        .await
+        .unwrap_or_default();
     Ok(Pen {
         path: path.to_string(),
         name,
@@ -264,6 +270,7 @@ async fn read_pen(connection: &Connection, path: &str) -> Result<Pen, String> {
         present,
         paired,
         trusted,
+        firmware: firmware_from_wire(firmware),
         battery: battery_from_wire(percent),
         battery_detail: BatteryDetail::from_wire(precise, millivolts, docked),
         haptics: read_haptics(connection, path).await,
@@ -503,6 +510,7 @@ mod tests {
             present,
             paired: true,
             trusted: true,
+            firmware: None,
             battery: None,
             battery_detail: None,
             haptics: None,

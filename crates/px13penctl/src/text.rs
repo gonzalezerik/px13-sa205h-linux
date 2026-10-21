@@ -71,6 +71,7 @@ mod tests {
             present,
             paired: true,
             trusted: true,
+            firmware: None,
             battery: Some(87),
             battery_detail: None,
             haptics: None,
