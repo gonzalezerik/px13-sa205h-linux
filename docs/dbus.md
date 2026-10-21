@@ -214,7 +214,26 @@ who also binds those keys in the compositor sees both fire — bind one side, no
 it is host policy, never a pen write: the commands persist across daemon restarts in
 `px13pen/buttons.conf` under `$XDG_CONFIG_HOME`, beside the haptics file (docs/settings.md).
 
-## 9. Errors
+## 9. `io.github.gonzalezerik.Px13Pen.Notifications1`
+
+Exported on every pen path. One switch over the daemon's three pen-status
+notes — the pen going idle (`Idle · 84 %`), falling asleep on its charger
+(`Docked · Charging 84 %`) and being picked up again (the battery and
+nothing else) — which `px13pend` sends itself as low-urgency desktop
+notifications, each replacing the last (the wording and the windows are
+`status.rs`'s; docs/settings.md documents the switch).
+
+| Property | Type | Meaning |
+|---|---|---|
+| `Enabled` | `b` r/w | whether those notes are sent; `true` (the default) unless silenced |
+
+Like the haptics policy it is **per user, not per pen**: every pen path
+exports the same value. Turning it off silences the status notes only —
+pairing never goes quiet (§4), and pairing notes do not answer to this
+switch. The value persists across daemon restarts in `px13pen/status.conf`
+under `$XDG_CONFIG_HOME`, beside the other policy files (docs/settings.md).
+
+## 10. Errors
 
 v1 uses the standard `org.freedesktop.DBus.Error.*` names, with a stable prefix in the
 message text so clients can branch:
@@ -229,7 +248,7 @@ message text so clients can branch:
 
 `io.github.gonzalezerik.Px13Pen.Error.*` is reserved for future majors.
 
-## 10. Not in v1 (deliberately)
+## 11. Not in v1 (deliberately)
 
 - `ObjectManager` / `GetManagedObjects` on the root object.
 - A `Buttons1` action richer than "run this command" (haptics on gesture, per-gesture
@@ -239,7 +258,7 @@ message text so clients can branch:
 - The app-facing haptics portal (xdg-desktop-portal) — a separate interface on top of
   this one, out of scope here (docs/decisions.md §scope, item 3).
 
-## 11. Trying it
+## 12. Trying it
 
 ```console
 $ px13pend serve &

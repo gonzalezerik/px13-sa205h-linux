@@ -46,6 +46,7 @@ One compact line:
 | `battery_detail` | object, or absent | `{"percent": number, "millivolts": number, "docked": bool}` from `Pen1.BatteryPercentPrecise`, `BatteryMillivolts` and `Docked`; `percent` and `millivolts` are absent until the first reading, and the whole object is absent when the daemon has none of the three |
 | `haptics` | object or null | `{"enabled": bool, "intensity": 0–100, "while_inking": bool, "while_interacting": bool, "ink_texture": string}`, or `null` when the pen does no haptics |
 | `buttons` | object, or absent | `{"single": string, "double": string, "long": string}` — the configured shortcut-button commands from `Buttons1` (empty = do nothing); absent when the pen has no shortcut button |
+| `status_notifications` | `false`, or absent | `Notifications1.Enabled` — absent means on (the default); `false` says the daemon's idle/dock/wake notes are silenced (docs/settings.md) |
 | `capabilities` | object or null | `Pen1.Capabilities` projected to JSON; `null` only when the read failed |
 
 Capability keys follow docs/dbus.md §6 — a key that is absent means the
@@ -60,9 +61,11 @@ Haptics UIs draw from `waveforms`, never from a hardcoded effect list.
 One line per pen — `SA205H  battery 87 %` — with `battery unknown`
 before the first battery reading, the pen's own gauge in brackets when
 the daemon has it (`SA205H  battery 78 % (78.73 %, 4105 mV)`), a
-`  firmware 2.0.37` segment once the pen's firmware has been read, and a
+`  firmware 2.0.37` segment once the pen's firmware has been read, a
 `  link down` suffix under `--all`, or `  on charger` for a pen asleep
-on its charger.
+on its charger. Silenced status notifications add a
+`  notifications off` suffix; on is the default and goes unmentioned,
+in the text and in the JSON alike.
 
 ## `watch`
 

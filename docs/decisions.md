@@ -119,6 +119,7 @@ A small session agent, started on login, stays invisible until a pen connects.
   (`org.freedesktop.Notifications`) says so, with a "Pen settings" action. A failed
   pairing also notifies, so a tap never silently does nothing.
 - **Reconnects** are silent: the tray icon and the bar module just come back.
+  (Superseded 2026-10-21: see "the pen says when it goes and comes" below.)
 - **Disconnect:** the icon goes away after a grace period, not immediately, because BLE
   pens drop the link when idle. The period is set once idle-disconnect timing has been
   measured on hardware.
@@ -183,3 +184,38 @@ open:
   accessibility gate (`crates/px13pen-tray/tests/a11y.rs`) landed before
   the tray: labels in words, battery by icon shape, state as check mark
   or radio dot — never by colour.
+
+## 2026-10-21: the pen says when it goes and comes
+
+Supersedes "reconnects are silent" above: a pen now says its state out
+loud, in three notes the daemon sends itself — it already owns
+notifications, and it is the one that sees the link, the gauge and the
+charger report (the tray sends none of its own).
+
+- **The three notes**, titled with the pen's advertised name:
+  `Idle · 84 %` when the link drops off the desk, `Docked · Charging
+  84 %` when it falls asleep on its charger, and a plain `84 %` when it
+  is picked up again — the battery and nothing else, a reconnect said
+  in the number. Percentages are the gauge's own reading rounded, or
+  `Battery1`'s when no gauge has spoken.
+- **One note per drop, decided before it is sent.** A set-down pen
+  drops its link within seconds and a charger report — if there is
+  one — lands within three seconds of the sleep log, in either order
+  around the drop; so the drop waits out that window and is then named
+  once. Never an `Idle` a late report then corrects to `Docked`, and a
+  pen back inside the window was only picked up: one flap, at most one
+  note. (`crates/px13pend/src/status.rs` is that decision machine, on
+  an injected clock.)
+- **A wake-up waits briefly for a fresh reading** — gauge or
+  `Battery1` — rather than repeating the stale number from before the
+  sleep, then falls back to the newest value it has. A pen nobody ever
+  read says nothing: a note with no number in it is not a sentence.
+  First sightings and first pairings also stay quiet — pairing has its
+  own note, and a daemon must not announce the pen it woke up next to.
+- **One note on screen, not a pile:** each status note passes the
+  previous one's id as `replaces_id`, arrives with low urgency, a
+  transient hint and a five-second expiry. Pairing and failure notes
+  keep their own behaviour, and the switch silences neither of them.
+- **Silence is the user's call:** `Notifications1.Enabled`
+  (`px13pen/status.conf`), default on, a switch on every settings card
+  (docs/dbus.md §9, docs/settings.md).

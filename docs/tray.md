@@ -41,6 +41,8 @@ it to their hidden drawer instead of painting a dead icon.
 - **Pair a pen…** — asks `px13pend` to start touch-to-pair. The
   daemon's own notifications report how pairing went (docs/dbus.md);
   the tray adds none of its own, so a pairing never double-notifies.
+  Nor does it send status notes — idle, dock and wake are the
+  daemon's word alone (docs/settings.md).
 - **Settings…** — launches `px13pen-settings`.
 
 A click never blocks the menu on Bluetooth: the write goes out on its

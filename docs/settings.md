@@ -28,7 +28,10 @@ clicks, presses and hovers) and an **Ink texture** picker
 minus the eraser, which the daemon arms by itself when the pen is
 inverted). Controls the current policy cannot use are greyed out:
 everything but the master switch while haptics are off, and the
-texture picker while *While inking* is off.
+texture picker while *While inking* is off. Every card ends with the
+**Status notifications** switch (`Notifications1.Enabled`): whether
+the daemon says out loud when the pen goes idle, docks or wakes —
+on for every card, haptics or not.
 
 A pen with the top shortcut button (`Buttons1` on its object) also
 gets a **Shortcut button** card: one entry per gesture — *Single
@@ -90,6 +93,23 @@ Same rules: `Buttons1` writes it, the daemon re-reads it at startup,
 and unknown keys are ignored. A command runs as `sh -c <command>`
 from the daemon's session, detached; its exit status is not reported
 back.
+
+The status notification switch lives beside them, in
+`px13pen/status.conf`:
+
+```ini
+# px13pen status notifications — written by px13pend; see docs/settings.md.
+enabled=true
+```
+
+Same rules again: `Notifications1.Enabled` writes it and the daemon
+re-reads it at startup. `enabled=false` silences the pen-status notes
+— `Idle · 84 %` when the pen falls asleep off the charger,
+`Docked · Charging 84 %` when it falls asleep on it, and the plain
+battery percentage when it wakes (docs/dbus.md §9). The notes are
+low-urgency, replace each other and expire on their own; silencing
+them quiets the pen's comings and goings only — pairing still
+notifies.
 
 ## Menu and desktop entry
 
