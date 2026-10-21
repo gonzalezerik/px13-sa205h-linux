@@ -18,3 +18,18 @@
 .md-footer-meta a {
   text-decoration: underline;
 }
+
+/* The palette toggle is a visually hidden radio: without this, keyboard
+   focus lands on nothing visible at all. Outline the icon that stands for
+   the focused radio. */
+.md-header__option:has(.md-option:focus-visible) > label[for^="__palette"] {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}
+
+/* The search field drops the UA outline and relies on the panel opening;
+   give the input itself a ring too. */
+.md-search__input:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}
