@@ -47,6 +47,13 @@ A click never blocks the menu on Bluetooth: the write goes out on its
 own thread, and the daemon echoes the new value back as a pen change,
 which is where the menu re-reads it from.
 
+Which button opens the menu is the host's choice. The item declares
+`ItemIsMenu`, so hosts that follow that convention — KDE Plasma, GNOME
+with the AppIndicator extension — open it on a left click; hosts that
+follow the older tray convention, Noctalia among them, bind the menu
+to the right button and leave the left click idle. The same menu
+either way.
+
 ## Accessibility
 
 The rule (docs/decisions.md): every fact in words as well as in shape,
