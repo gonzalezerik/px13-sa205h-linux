@@ -41,7 +41,10 @@ A protocol is listed as supported only once it has been tested on real hardware.
 > [docs/future/kernel-le-legacy-oob.md](docs/future/kernel-le-legacy-oob.md); with it the
 > daemon would send a random key and pair exactly as Windows does.
 >
-> Haptics, battery and the Bluetooth buttons are in progress.
+> Haptics (with an opt-in hover-out tick), the pen's fuel gauge and charger, the top
+> button's gestures with a command per gesture, the tray icon, pen status notes and the
+> firmware revision all run on the hardware today — every one a client of the same
+> versioned D-Bus interface ([docs/dbus.md](docs/dbus.md)).
 
 ## Platforms
 
@@ -130,12 +133,14 @@ the privacy pre-commit hook (§4).
 ```sh
 px13penctl --version
 px13pend                      # prints the supported digitizers
+px13pend serve                # the daemon: D-Bus API, touch-to-pair listener, button actions
 px13pend pairing-state        # reads the digitizer's seamless-pairing flag (read-only)
 px13pend watch-pair --dry-run # prints pairing notifications as a pen approaches, changes nothing
 px13pend watch-pair           # touch-to-pair in the foreground (docs/protocol/seamless-pairing.md)
 px13penctl watch              # follow the daemon live: pens, battery, pairing progress
 px13pend watch-pen            # live battery + link changes of the paired pen (via BlueZ)
 px13pend watch-buttons --list # lists the pen's evdev nodes; without --list dumps its raw events
+px13pend pen-log              # the pen's firmware log: fuel-gauge and charger readings (findings/010)
 px13pend haptic --list        # the pen's effect table (ordinals from its capability report)
 px13pend haptic click --send  # one click buzz on the paired pen; without --send only the exact
                           # output-report bytes are printed
@@ -168,7 +173,8 @@ On NixOS, importing the flake's module is the entire system setup:
 ```
 
 That wires the udev rules, the D-Bus activation and policy files, the polkit action and the
-units from the package into the system; see [docs/packaging.md](docs/packaging.md).
+units from the package into the system — and applies the rule to the devices already
+connected, so the switch alone is enough; see [docs/packaging.md](docs/packaging.md).
 
 ## Reverse-engineering workbench
 
