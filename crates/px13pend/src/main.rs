@@ -28,6 +28,7 @@ mod presence;
 mod service;
 mod settings;
 mod shortcut;
+mod status;
 mod telemetry;
 
 use hidapi::{DeviceInfo, HidApi};

@@ -21,7 +21,7 @@
 //! emitting reads the property back through the same getter.
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -34,6 +34,7 @@ use px13pen_core::seamless;
 use crate::ink;
 use crate::settings::{self, HapticsSettings};
 use crate::shortcut::{self, Gesture};
+use crate::status::{self, Note};
 use crate::telemetry::Report;
 use zbus::fdo::{self, ManagedObjects};
 use zbus::object_server::{InterfaceRef, SignalEmitter};
@@ -54,6 +55,9 @@ const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 
 /// The service loop period: how fast the pairing listener reacts.
 const TICK: Duration = Duration::from_millis(100);
+/// A status note lives briefly and never reappears (status.rs); pairing
+/// notes keep the server's own default.
+const STATUS_NOTE_TIMEOUT_MS: i32 = 5000;
 /// Pen objects and properties follow BlueZ every fifth tick (500 ms).
 const SYNC_EVERY_TICKS: u32 = 5;
 /// Upper bound on hidraw frames handled per tick, so the digitizer's
@@ -145,6 +149,9 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         haptics: Arc::new(Mutex::new(settings::load())),
         buttons: Arc::new(Mutex::new(settings::load_buttons())),
         ink: Mutex::new(ink::Arming::default()),
+        status: Arc::new(Mutex::new(settings::load_status())),
+        tracker: Mutex::new(status::Tracker::default()),
+        status_note_id: AtomicU32::new(0),
     });
     state.register_host().await;
     connection
@@ -198,6 +205,16 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
             && let Err(error) = state.apply_reports(telemetry.drain()).await
         {
             eprintln!("pen log: {error}");
+        }
+        // Status notes whose window has closed: a drop without a
+        // charger report is Idle now, a wake-up says the newest number
+        // it got (status.rs). Decided with the lock, sent without it.
+        let due = {
+            let mut tracker = locked(&state.tracker);
+            tracker.tick(Instant::now())
+        };
+        for (px13pend_path, note) in due {
+            state.status_note(&px13pend_path, note).await;
         }
         if let Some(watcher) = shortcut.as_mut() {
             for event in watcher.poll() {
@@ -291,6 +308,14 @@ struct State {
     /// While-inking arming state, driven by the digitizer drain
     /// (crates/px13pend/src/ink.rs).
     ink: Mutex<ink::Arming>,
+    /// The status notification switch every pen shares, from the user's
+    /// config file (docs/settings.md).
+    status: Arc<Mutex<settings::StatusSettings>>,
+    /// Which status note each pen's changes add up to (status.rs).
+    tracker: Mutex<status::Tracker>,
+    /// The id of the last status note, passed as `replaces_id` so the
+    /// next one takes its place on screen instead of stacking up.
+    status_note_id: AtomicU32,
 }
 
 /// The listener's memory of one announced address.
@@ -426,6 +451,21 @@ impl PenValues {
             }
         }
         diff
+    }
+
+    /// The level worth saying: the gauge's own reading when there is
+    /// one — it is the precise one — else `Battery1`'s, rounded to a
+    /// whole percent. `None` while neither has ever reported: a note
+    /// with no number in it is not a sentence (status.rs).
+    fn whole_percent(&self) -> Option<u8> {
+        let raw = if self.battery_precise >= 0.0 {
+            self.battery_precise
+        } else if self.battery >= 0 {
+            f64::from(self.battery)
+        } else {
+            return None;
+        };
+        Some(raw.round().clamp(0.0, 100.0) as u8)
     }
 }
 
@@ -679,12 +719,55 @@ impl State {
         if !self.notify {
             return;
         }
-        let mut hints: HashMap<&str, Variant<'_>> = HashMap::new();
-        hints.insert(
-            "desktop-entry",
-            Variant::from("io.github.gonzalezerik.Px13Pen.Settings"),
-        );
-        hints.insert("category", Variant::from("device"));
+        self.post(0, device_hints(), -1, summary, body).await.ok();
+    }
+
+    /// One pen-status note (status.rs): the pen's name as the title,
+    /// the state as the body. Low urgency and transient with a short
+    /// expiry, and each replaces the previous status note — one on
+    /// screen at a time, nothing piling up in history. Suppressed while
+    /// the user's switch says quiet (docs/settings.md).
+    async fn status_note(&self, px13pend_path: &str, note: Note) {
+        if !self.notify || !locked(&self.status).enabled {
+            return;
+        }
+        let name = {
+            let pens = locked(&self.pens);
+            let Some(entry) = pens
+                .values()
+                .find(|entry| entry.px13pend_path == px13pend_path)
+            else {
+                return;
+            };
+            locked(&entry.data).name.clone()
+        };
+        let body = match note {
+            Note::Idle { percent } => format!("Idle · {percent} %"),
+            Note::Docked { percent } => format!("Docked · Charging {percent} %"),
+            Note::Awake { percent } => format!("{percent} %"),
+        };
+        let mut hints = device_hints();
+        hints.insert("urgency", Variant::from(0u8));
+        hints.insert("transient", Variant::from(1u8));
+        let replaces = self.status_note_id.load(Ordering::Relaxed);
+        if let Ok(id) = self
+            .post(replaces, hints, STATUS_NOTE_TIMEOUT_MS, &name, &body)
+            .await
+        {
+            self.status_note_id.store(id, Ordering::Relaxed);
+        }
+    }
+
+    /// The `Notify` call itself. Best effort: a missing server or a
+    /// refused note is a log line, never a failed pen.
+    async fn post(
+        &self,
+        replaces_id: u32,
+        hints: HashMap<&'static str, Variant<'static>>,
+        expires_ms: i32,
+        summary: &str,
+        body: &str,
+    ) -> zbus::Result<u32> {
         let actions: Vec<&str> = Vec::new();
         let sent: zbus::Result<u32> = match Proxy::new(
             &self.connection,
@@ -700,22 +783,23 @@ impl State {
                         "Notify",
                         &(
                             "PX13 SA205H Linux",
-                            0u32,
+                            replaces_id,
                             "input-tablet",
                             summary,
                             body,
                             actions,
                             hints,
-                            -1i32,
+                            expires_ms,
                         ),
                     )
                     .await
             }
             Err(error) => Err(error),
         };
-        if let Err(error) = sent {
+        if let Err(error) = &sent {
             eprintln!("notification not shown: {error}");
         }
+        sent
     }
 
     /// Re-read BlueZ's tree, then create, refresh and remove pen
@@ -724,17 +808,20 @@ impl State {
     async fn sync_pens(&self, daemon: &InterfaceRef<Daemon>, announce: bool) -> Result<(), String> {
         let observed = self.scan_pens().await?;
         let now = Instant::now();
-        let (installs, removals, updates, firmware_reads) = {
+        let (installs, removals, updates, firmware_reads, notes) = {
             let mut installs: Vec<PendingInstall> = Vec::new();
             let mut updates: Vec<(String, Diff)> = Vec::new();
             let mut firmware_reads: Vec<(String, Arc<Mutex<PenValues>>, String)> = Vec::new();
+            let mut notes: Vec<(String, Note)> = Vec::new();
             let mut current = locked(&self.pens);
+            let mut tracker = locked(&self.tracker);
             let removals: Vec<String> = current
                 .iter()
                 .filter(|(bluez_path, _)| !observed.iter().any(|o| o.bluez_path == **bluez_path))
                 .map(|(_, entry)| entry.px13pend_path.clone())
                 .collect();
             for px13pend_path in &removals {
+                tracker.forgotten(px13pend_path);
                 current.retain(|_, entry| &entry.px13pend_path != px13pend_path);
             }
             for observation in &observed {
@@ -752,6 +839,26 @@ impl State {
                         entry.caps_shape = shape;
                         diff.capabilities = true;
                     }
+                    // The same scan feeds the status notes: a link that
+                    // came or went, a `Battery1` reading that moved.
+                    if diff.present {
+                        let values = locked(&entry.data);
+                        let (present, percent) = (values.present, values.whole_percent());
+                        drop(values);
+                        let note = if present {
+                            tracker.link_up(&entry.px13pend_path, percent, now)
+                        } else {
+                            tracker.link_down(&entry.px13pend_path, percent, now)
+                        };
+                        if let Some(note) = note {
+                            notes.push((entry.px13pend_path.clone(), note));
+                        }
+                    } else if diff.battery {
+                        let percent = locked(&entry.data).whole_percent();
+                        if let Some(note) = tracker.battery(&entry.px13pend_path, percent) {
+                            notes.push((entry.px13pend_path.clone(), note));
+                        }
+                    }
                     if diff.any() {
                         updates.push((entry.px13pend_path.clone(), diff));
                     }
@@ -768,6 +875,10 @@ impl State {
                     }
                 } else {
                     let px13pend_path = pen_object_path(&observation.bluez_path);
+                    // A first sighting never notes: a new pen arrives
+                    // with a pairing notification, and a daemon must
+                    // not announce the pen it woke up next to.
+                    tracker.sighted(&px13pend_path, observation.present);
                     let data = Arc::new(Mutex::new(PenValues::new(
                         observation,
                         build_capabilities(shape),
@@ -799,7 +910,7 @@ impl State {
                     );
                 }
             }
-            (installs, removals, updates, firmware_reads)
+            (installs, removals, updates, firmware_reads, notes)
         };
 
         for px13pend_path in removals {
@@ -816,6 +927,11 @@ impl State {
             self.connection
                 .object_server()
                 .remove::<Buttons1, _>(path_of(&px13pend_path)?)
+                .await
+                .ok();
+            self.connection
+                .object_server()
+                .remove::<Notifications1, _>(path_of(&px13pend_path)?)
                 .await
                 .ok();
             if announce {
@@ -857,6 +973,18 @@ impl State {
                 .at(path_of(&px13pend_path)?, Buttons1 { settings: buttons })
                 .await
                 .map_err(|error| format!("cannot export buttons on {px13pend_path}: {error}"))?;
+            self.connection
+                .object_server()
+                .at(
+                    path_of(&px13pend_path)?,
+                    Notifications1 {
+                        settings: Arc::clone(&self.status),
+                    },
+                )
+                .await
+                .map_err(|error| {
+                    format!("cannot export notifications on {px13pend_path}: {error}")
+                })?;
             if announce {
                 let path = owned_path(&px13pend_path)?;
                 daemon
@@ -898,6 +1026,9 @@ impl State {
                 )
                 .await?;
             }
+        }
+        for (px13pend_path, note) in notes {
+            self.status_note(&px13pend_path, note).await;
         }
         Ok(())
     }
@@ -987,11 +1118,29 @@ impl State {
     /// and announce what changed.
     async fn apply_reports(&self, reports: Vec<(String, Report)>) -> Result<(), String> {
         let mut changes: Vec<(String, Diff)> = Vec::new();
+        let mut notes: Vec<(String, Note)> = Vec::new();
         {
             let pens = locked(&self.pens);
+            let mut tracker = locked(&self.tracker);
             for (device, report) in &reports {
                 if let Some(entry) = pens.get(device) {
-                    let diff = locked(&entry.data).apply_report(report);
+                    let mut values = locked(&entry.data);
+                    let diff = values.apply_report(report);
+                    // The pen log feeds the status notes directly: the
+                    // charger report is the dock decision, and the
+                    // gauge is the reading a wake-up note waits for.
+                    if diff.docked && matches!(report, Report::Docked) {
+                        let percent = values.whole_percent();
+                        if let Some(note) = tracker.docked(&entry.px13pend_path, percent) {
+                            notes.push((entry.px13pend_path.clone(), note));
+                        }
+                    } else if diff.battery_precise {
+                        let percent = values.whole_percent();
+                        if let Some(note) = tracker.battery(&entry.px13pend_path, percent) {
+                            notes.push((entry.px13pend_path.clone(), note));
+                        }
+                    }
+                    drop(values);
                     if diff.any() {
                         changes.push((entry.px13pend_path.clone(), diff));
                     }
@@ -1000,6 +1149,9 @@ impl State {
         }
         for (px13pend_path, diff) in changes {
             self.emit_changes(&px13pend_path, &diff).await?;
+        }
+        for (px13pend_path, note) in notes {
+            self.status_note(&px13pend_path, note).await;
         }
         Ok(())
     }
@@ -1264,6 +1416,18 @@ fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// The hints every notification from us carries: clicking one opens
+/// the settings window, and the category says what kind of thing it is.
+fn device_hints() -> HashMap<&'static str, Variant<'static>> {
+    let mut hints = HashMap::new();
+    hints.insert(
+        "desktop-entry",
+        Variant::from("io.github.gonzalezerik.Px13Pen.Settings"),
+    );
+    hints.insert("category", Variant::from("device"));
+    hints
 }
 
 // ---------------------------------------------------------------------------
@@ -1753,6 +1917,49 @@ impl Buttons1 {
             current
         };
         settings::save_buttons(&next).map_err(fdo::Error::Failed)?;
+        *locked(&self.settings) = next;
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// io.github.gonzalezerik.Px13Pen.Notifications1
+// ---------------------------------------------------------------------------
+
+/// The status notification interface, exported on every pen path: one
+/// switch over the daemon's pen-status notes — `Idle · 84 %`,
+/// `Docked · Charging 84 %`, and the plain battery when a pen wakes
+/// (status.rs). Shared by every pen (one user, one policy) and
+/// persisted to the user's config file (settings.rs); the pairing
+/// notes answer to it not at all.
+pub struct Notifications1 {
+    settings: Arc<Mutex<settings::StatusSettings>>,
+}
+
+#[zbus::interface(name = "io.github.gonzalezerik.Px13Pen.Notifications1")]
+impl Notifications1 {
+    /// Whether the daemon says out loud when a pen goes idle, docks
+    /// or wakes.
+    #[zbus(property)]
+    fn enabled(&self) -> bool {
+        locked(&self.settings).enabled
+    }
+
+    #[zbus(property)]
+    fn set_enabled(&self, value: bool) -> fdo::Result<()> {
+        self.apply(|settings| settings.enabled = value)
+    }
+}
+
+impl Notifications1 {
+    /// Change the switch and persist it, file first like the others.
+    fn apply(&self, change: impl FnOnce(&mut settings::StatusSettings)) -> fdo::Result<()> {
+        let next = {
+            let mut current = locked(&self.settings).clone();
+            change(&mut current);
+            current
+        };
+        settings::save_status(&next).map_err(fdo::Error::Failed)?;
         *locked(&self.settings) = next;
         Ok(())
     }

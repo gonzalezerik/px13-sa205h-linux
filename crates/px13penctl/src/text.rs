@@ -76,6 +76,7 @@ mod tests {
             battery_detail: None,
             haptics: None,
             buttons: None,
+            status_notifications: true,
             capabilities: None,
         }
     }

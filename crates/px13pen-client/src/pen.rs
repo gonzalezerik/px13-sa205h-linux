@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! What one pen looks like after it has been read off the bus: the
-//! `Pen1` properties, the `Haptics1` policy, the `Buttons1` actions and
+//! `Pen1` properties, the `Haptics1` policy, the `Buttons1` actions,
+//! the `Notifications1` switch and
 //! the projected capability dict (docs/dbus.md), in the field names
 //! frontends publish (docs/px13penctl.md). Serialisation rules — which
 //! keys vanish when absent — are the contract, so they live with the
@@ -31,7 +32,18 @@ pub struct Pen {
     /// when the pen offers no such interface.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub buttons: Option<ButtonActions>,
+    /// Whether the daemon says when this kind of pen goes idle, docks
+    /// or wakes (the daemon's `Notifications1`). One policy for every
+    /// pen, like haptics, so the key appears only when it is off —
+    /// nobody wants it in every line of a bar module.
+    #[serde(skip_serializing_if = "is_on")]
+    pub status_notifications: bool,
     pub capabilities: Option<Capabilities>,
+}
+
+/// Serde only wants to hear about the switch when someone turned it off.
+fn is_on(enabled: &bool) -> bool {
+    *enabled
 }
 
 /// What the pen's own log adds to the battery level.

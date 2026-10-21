@@ -22,6 +22,7 @@ const DAEMON_PATH: &str = "/io/github/gonzalezerik/Px13Pen/Daemon";
 const DAEMON_IFACE: &str = "io.github.gonzalezerik.Px13Pen.Daemon1";
 const PEN_IFACE: &str = "io.github.gonzalezerik.Px13Pen.Pen1";
 const HAPTICS_IFACE: &str = "io.github.gonzalezerik.Px13Pen.Haptics1";
+const NOTIFICATIONS_IFACE: &str = "io.github.gonzalezerik.Px13Pen.Notifications1";
 const BUTTONS_IFACE: &str = "io.github.gonzalezerik.Px13Pen.Buttons1";
 const PEN_ROOT: &str = "/io/github/gonzalezerik/Px13Pen/pen/";
 const PROPERTIES_IFACE: &str = "org.freedesktop.DBus.Properties";
@@ -172,6 +173,19 @@ impl Client {
             .map_err(|error| format!("setting {name}: {error}"))
     }
 
+    /// Write `Notifications1.Enabled`: whether the daemon says when a
+    /// pen goes idle, docks or wakes. One policy for every pen, like
+    /// the haptics one.
+    pub async fn set_status_notifications(&self, path: &str, enabled: bool) -> Result<(), String> {
+        let notifications = Proxy::new(&self.connection, BUS_NAME, path, NOTIFICATIONS_IFACE)
+            .await
+            .map_err(|error| format!("{path}: {error}"))?;
+        notifications
+            .set_property("Enabled", enabled)
+            .await
+            .map_err(|error| format!("setting Enabled: {error}"))
+    }
+
     async fn set_haptics_property<T>(&self, path: &str, name: &str, value: T) -> Result<(), String>
     where
         T: serde::Serialize + zbus::zvariant::Type,
@@ -275,6 +289,7 @@ async fn read_pen(connection: &Connection, path: &str) -> Result<Pen, String> {
         battery_detail: BatteryDetail::from_wire(precise, millivolts, docked),
         haptics: read_haptics(connection, path).await,
         buttons: read_buttons(connection, path).await,
+        status_notifications: read_status_notifications(connection, path).await,
         capabilities: pen
             .get_property::<BTreeMap<String, OwnedVariant>>("Capabilities")
             .await
@@ -327,6 +342,20 @@ async fn read_buttons(connection: &Connection, path: &str) -> Option<ButtonActio
         double,
         long,
     })
+}
+
+/// `Notifications1.Enabled`. Shared by every pen like the haptics
+/// policy, and must never fail a pen read: a daemon without the
+/// interface says nothing, which reads as the shipped default — on.
+async fn read_status_notifications(connection: &Connection, path: &str) -> bool {
+    let Ok(notifications) = Proxy::new(connection, BUS_NAME, path, NOTIFICATIONS_IFACE).await
+    else {
+        return true;
+    };
+    notifications
+        .get_property::<bool>("Enabled")
+        .await
+        .unwrap_or(true)
 }
 
 /// Turn one daemon signal into at most one event. `PenAdded` and
@@ -515,6 +544,7 @@ mod tests {
             battery_detail: None,
             haptics: None,
             buttons: None,
+            status_notifications: true,
             capabilities: None,
         };
         let pens = vec![sample(true), sample(false)];

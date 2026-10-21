@@ -129,6 +129,7 @@ mod tests {
                 ink_texture: "ink".to_string(),
             }),
             buttons: None,
+            status_notifications: true,
             capabilities: None,
         }
     }

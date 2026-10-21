@@ -181,6 +181,90 @@ pub fn parse_buttons(text: &str) -> ButtonSettings {
     settings
 }
 
+/// The status notification policy: one boolean — whether the daemon
+/// says out loud when a pen goes idle, docks or wakes. On unless the
+/// user silenced it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusSettings {
+    pub enabled: bool,
+}
+
+impl Default for StatusSettings {
+    fn default() -> Self {
+        StatusSettings { enabled: true }
+    }
+}
+
+/// Where the status file lives: `px13pen/status.conf`, same directory
+/// rules as the other policy files.
+pub fn status_config_path() -> Option<PathBuf> {
+    config_dir().map(|dir| dir.join("status.conf"))
+}
+
+/// Read the status policy; a missing file is "notify", and anything
+/// unparseable falls back key by key, like the other files.
+pub fn load_status() -> StatusSettings {
+    let Some(path) = status_config_path() else {
+        return StatusSettings::default();
+    };
+    match fs::read_to_string(&path) {
+        Ok(text) => parse_status(&text),
+        Err(error) if path.exists() => {
+            eprintln!("settings: {}: {error} — using defaults", path.display());
+            StatusSettings::default()
+        }
+        Err(_) => StatusSettings::default(),
+    }
+}
+
+/// Write the status policy, temp file plus rename like the others.
+pub fn save_status(settings: &StatusSettings) -> Result<(), String> {
+    let Some(path) = status_config_path() else {
+        return Ok(());
+    };
+    let dir = path
+        .parent()
+        .ok_or_else(|| "config path has no parent".to_string())?;
+    fs::create_dir_all(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+    let tmp = path.with_extension("conf.tmp");
+    let result = (|| -> std::io::Result<()> {
+        let mut file = fs::File::create(&tmp)?;
+        file.write_all(status_to_text(settings).as_bytes())?;
+        file.flush()?;
+        fs::rename(&tmp, &path)
+    })();
+    result.map_err(|error| format!("{}: {error}", path.display()))
+}
+
+/// Serialise the status policy.
+pub fn status_to_text(settings: &StatusSettings) -> String {
+    format!(
+        "# px13pen status notifications — written by px13pend; see docs/settings.md.\n\
+         enabled={}\n",
+        settings.enabled,
+    )
+}
+
+/// Parse the `key=value` lines; unknown keys and bad values keep the
+/// current value, so `enabled=maybe` means "on" just like in the
+/// haptics file.
+pub fn parse_status(text: &str) -> StatusSettings {
+    let mut settings = StatusSettings::default();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() == "enabled" {
+            settings.enabled = parse_bool(value.trim()).unwrap_or(settings.enabled);
+        }
+    }
+    settings
+}
+
 /// Read the policy; a missing file is the defaults, and anything the
 /// parser cannot make sense of falls back per key.
 pub fn load() -> HapticsSettings {
@@ -332,6 +416,17 @@ mod tests {
         assert!(
             !is_ink_texture("click"),
             "discrete waveforms are not textures"
+        );
+    }
+
+    #[test]
+    fn the_status_file_round_trips_and_silences() {
+        assert!(parse_status(&status_to_text(&StatusSettings::default())).enabled);
+        assert!(!parse_status("enabled=false\n").enabled);
+        assert!(!parse_status("enabled=off\n").enabled);
+        assert!(
+            parse_status("enabled=maybe\n").enabled,
+            "an unparseable bool keeps the default"
         );
     }
 

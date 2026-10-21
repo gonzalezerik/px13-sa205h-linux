@@ -145,6 +145,7 @@ mod tests {
             battery_detail: detail,
             haptics: None,
             buttons: None,
+            status_notifications: true,
             capabilities: None,
         }
     }

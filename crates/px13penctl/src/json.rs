@@ -62,7 +62,9 @@ pub fn event_line(event: &Event) -> String {
 /// brackets when it has that too. The link is spelled out only when the
 /// pen is away — the default view only ever shows present pens, so the
 /// suffix appears together with `--all`; a pen asleep on its charger
-/// says so instead.
+/// says so instead. Silenced status notifications get their own
+/// suffix, and only when silenced: on is the default and needs no
+/// announcement.
 pub fn status_line(pen: &Pen) -> String {
     let battery = match pen.battery {
         Some(percent) => format!("battery {percent} %"),
@@ -99,7 +101,12 @@ pub fn status_line(pen: &Pen) -> String {
         (false, true) => "  on charger",
         (false, false) => "  link down",
     };
-    format!("{}  {battery}{detail}{firmware}{link}", pen.name)
+    let silence = if pen.status_notifications {
+        ""
+    } else {
+        "  notifications off"
+    };
+    format!("{}  {battery}{detail}{firmware}{link}{silence}", pen.name)
 }
 
 #[cfg(test)]
@@ -120,6 +127,7 @@ mod tests {
             battery_detail: None,
             haptics: None,
             buttons: None,
+            status_notifications: true,
             capabilities: None,
         }
     }
@@ -252,6 +260,28 @@ mod tests {
         let value = parse(&status_json(&[awake]).expect("one pen"));
         assert_eq!(value["pens"][0]["battery_detail"]["millivolts"], 4105);
         assert_eq!(value["pens"][0]["battery_detail"]["docked"], false);
+    }
+
+    #[test]
+    fn silenced_notifications_show_and_on_stays_unsaid() {
+        let mut sample = pen("0a_0b_0c_0d_0e_0f", true, Some(87));
+        assert_eq!(
+            status_line(&sample),
+            "SA205H  battery 87 %",
+            "on is the default and needs no announcement"
+        );
+        let value = parse(&status_json(&[sample.clone()]).expect("one pen"));
+        assert!(
+            value["pens"][0].get("status_notifications").is_none(),
+            "and no key either"
+        );
+        sample.status_notifications = false;
+        assert_eq!(
+            status_line(&sample),
+            "SA205H  battery 87 %  notifications off"
+        );
+        let value = parse(&status_json(&[sample]).expect("one pen"));
+        assert_eq!(value["pens"][0]["status_notifications"], false);
     }
 
     #[test]
