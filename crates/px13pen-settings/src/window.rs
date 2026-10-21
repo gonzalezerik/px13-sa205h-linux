@@ -28,13 +28,12 @@ use crate::runtime::{self, BusHandle, Command, UiEvent};
 const POLL: Duration = Duration::from_millis(120);
 
 /// The whole window state the poll needs, one card per visible pen.
-/// A pen with the shortcut button gets a second group under its card;
-/// `button_rows` pairs each row with the gesture name the daemon uses.
+/// A pen with the shortcut button gets a second group under its card.
 struct PenCard {
     pen: Pen,
     group: adw::PreferencesGroup,
     button_group: Option<adw::PreferencesGroup>,
-    button_rows: Vec<(&'static str, adw::EntryRow)>,
+    button_rows: Vec<ButtonRow>,
     haptics_switch: Option<adw::SwitchRow>,
     intensity_row: Option<adw::ActionRow>,
     intensity: Option<gtk::Scale>,
@@ -45,6 +44,16 @@ struct PenCard {
     textures: Vec<String>,
     /// The slider's latest value, not yet sent. Flushed by the poll.
     pending: Rc<RefCell<Option<u8>>>,
+}
+
+/// One shortcut-button command entry and what the daemon last reported
+/// for it. An `EntryRow` holds focus in its internal text widget, so
+/// `has_focus` on the row itself never tells us the user is typing —
+/// the last reported value is the safe thing to compare against.
+struct ButtonRow {
+    gesture: &'static str,
+    row: adw::EntryRow,
+    last: RefCell<String>,
 }
 
 impl PenCard {
@@ -191,6 +200,11 @@ impl PenCard {
                     ("long", "Long press", &actions.long),
                 ] {
                     let row = adw::EntryRow::builder().title(title).text(current).build();
+                    // The row's apply signal — the save — only fires
+                    // through the apply button or Enter while this is
+                    // on; the button also shows the user that typing
+                    // has an action waiting.
+                    row.set_show_apply_button(true);
                     let bus = bus.clone();
                     let path = pen.path.clone();
                     row.connect_apply(move |row| {
@@ -201,7 +215,11 @@ impl PenCard {
                         });
                     });
                     group.add(&row);
-                    rows.push((gesture, row));
+                    rows.push(ButtonRow {
+                        gesture,
+                        row,
+                        last: RefCell::new(current.clone()),
+                    });
                 }
                 (Some(group), rows)
             }
@@ -262,16 +280,22 @@ impl PenCard {
             row.set_sensitive(on && haptics.as_ref().is_some_and(|h| h.while_inking));
         }
         if let Some(actions) = pen.buttons.as_ref() {
-            for (gesture, row) in &self.button_rows {
-                let current = match *gesture {
+            for button in &self.button_rows {
+                let current = match button.gesture {
                     "single" => &actions.single,
                     "double" => &actions.double,
                     _ => &actions.long,
                 };
-                // Typing wins over an echo: a row being edited is left
-                // alone, and an unchanged row is not touched at all.
-                if !row.has_focus() && row.text().as_str() != current.as_str() {
-                    row.set_text(current);
+                // Only overwrite text nobody has touched: what is shown
+                // must equal what we last applied. Anything else is the
+                // user mid-word, and their keys win until they apply.
+                let shown = button.row.text();
+                let mut last = button.last.borrow_mut();
+                if shown.as_str() == current {
+                    *last = current.clone();
+                } else if shown.as_str() == last.as_str() {
+                    button.row.set_text(current);
+                    *last = current.clone();
                 }
             }
         }
