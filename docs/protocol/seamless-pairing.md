@@ -119,6 +119,12 @@ collection's other vendor reports and the firmware-update collection stay untouc
   KeyboardOnly agent, marks it trusted and notifies at once. A paired pen that does not reconnect
   within 3 s of an announcement is treated as a stale bond and paired fresh. `px13pend watch-pair`
   does the same in the foreground.
+- **Fresh-pen status.** The from-nothing case — a pen with no pairing for the host, the `0x6E`
+   flag without Host Pairing Exists — was verified end-to-end with the daemon on 2026-10-18/19
+   (findings/008: cold pen to bonded in ~0.7 s). A clean re-run needs a pen that has forgotten
+   this host, which has no safe pen-side command (any overwrite risks a paired host's bond), so
+   it is not re-tested on every build; the identity work of 2026-10-21 changed only how
+   announcements are *placed* (`identity.rs`), not the pairing sequence, so findings/008 stands.
 - **Use your own agent.** BlueZ sends pairing questions to the agent of the client that started
   the pairing, and otherwise to the session's default agent — on a desktop that is usually the
   shell's (KeyboardDisplay, with passkey and approve/deny popups, and requests rejected while
