@@ -13,7 +13,9 @@ $ px13pen-settings --system   # px13pend serve --system
 
 ## What it shows
 
-One card per connected pen: name, address, link state and battery. A
+One card per connected pen: name, address, link state, battery, and —
+once the daemon has read it from the connected pen — the pen's own
+firmware (`Pen1.FirmwareRevision`). A
 card only grows haptics controls when the daemon exported a `Haptics1`
 interface for that pen — a pen that cannot do haptics never shows a
 switch that would do nothing. The haptics rows are the master switch
@@ -31,8 +33,9 @@ texture picker while *While inking* is off.
 A pen with the top shortcut button (`Buttons1` on its object) also
 gets a **Shortcut button** card: one entry per gesture — *Single
 press*, *Double press*, *Long press* — holding the shell command that
-gesture runs, empty meaning do nothing. The command goes out when you
-press Enter in its entry. The card says what the entries share: the
+gesture runs, empty meaning do nothing. Typing reveals a check button
+in the entry; pressing it or pressing Enter sends the command. The card
+says what the entries share: the
 pen's own Win+F18/19/20 key press still reaches the desktop whatever
 you type here, so a gesture bound in both the compositor and this
 window fires twice — pick one side.

@@ -96,6 +96,7 @@ bond, and the first failure of a streak, raises a desktop notification
 | `BatteryPercentPrecise` | `d` | state of charge to a hundredth of a percent from the pen's own fuel gauge, or `-1.0` while none has arrived. Only on pens with the `battery-detail` capability. |
 | `BatteryMillivolts` | `i` | battery voltage from the same source, or `-1` |
 | `Docked` | `b` | the pen went to sleep on its charger and has not connected since: it is charging, out of Bluetooth's reach. Read from the log as: a `Charge State:` line, a fuel-gauge sample in the moment before sleep showing the battery no longer discharging, then sleep within 3 s of the line — the line alone also precedes an off-charger sleep, and the text never says "Charging" (findings/010 §3). Cleared on the next connect. Always `false` without `battery-detail`. |
+| `FirmwareRevision` | `s` | the pen's firmware string — the version its own panel shows — read over GATT from the standard Device Information service (0x180A, characteristic 0x2A26), added within v1 (§2). The daemon reads it while the pen is connected and never writes; empty until the read has succeeded. |
 | `Capabilities` | `a{sv}` | the capability dict, §6 |
 
 Every property change emits standard `org.freedesktop.DBus.Properties.PropertiesChanged`;
@@ -103,7 +104,9 @@ there are no custom changed-signals.
 
 `BatteryPercentPrecise`, `BatteryMillivolts` and `Docked` were added within v1 (§2): the daemon
 reads them from the pen's firmware log (findings/010), which it subscribes to on every connect
-and never writes to. `BatteryPercent` stays the battery service's value.
+and never writes to. `BatteryPercent` stays the battery service's value. `FirmwareRevision`
+came later within v1, from the same safe-reads-only rule: one plain `ReadValue` per connected
+pen, retried on later connections until the pen answers.
 
 ### Signals
 

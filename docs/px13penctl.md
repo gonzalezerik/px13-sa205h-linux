@@ -41,6 +41,7 @@ One compact line:
 | `present` | bool | `Pen1.Present` — the pen holds a Bluetooth link right now |
 | `paired` | bool | `Pen1.Paired` |
 | `trusted` | bool | `Pen1.Trusted` |
+| `firmware` | string, or absent | `Pen1.FirmwareRevision` — the pen's own firmware string, read over GATT; absent until the daemon has read it from a connected pen |
 | `battery` | number or null | `Pen1.BatteryPercent`; `null` until the first reading (the wire's `-1`) |
 | `battery_detail` | object, or absent | `{"percent": number, "millivolts": number, "docked": bool}` from `Pen1.BatteryPercentPrecise`, `BatteryMillivolts` and `Docked`; `percent` and `millivolts` are absent until the first reading, and the whole object is absent when the daemon has none of the three |
 | `haptics` | object or null | `{"enabled": bool, "intensity": 0–100, "while_inking": bool, "while_interacting": bool, "ink_texture": string}`, or `null` when the pen does no haptics |
@@ -58,7 +59,8 @@ Haptics UIs draw from `waveforms`, never from a hardcoded effect list.
 
 One line per pen — `SA205H  battery 87 %` — with `battery unknown`
 before the first battery reading, the pen's own gauge in brackets when
-the daemon has it (`SA205H  battery 78 % (78.73 %, 4105 mV)`), and a
+the daemon has it (`SA205H  battery 78 % (78.73 %, 4105 mV)`), a
+`  firmware 2.0.37` segment once the pen's firmware has been read, and a
 `  link down` suffix under `--all`, or `  on charger` for a pen asleep
 on its charger.
 
@@ -111,7 +113,7 @@ connection — restart it to follow a restarted `px13pend`.
 A pen object in full (address redacted):
 
 ```json
-{"type":"pen.changed","pen":{"path":"/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05","name":"SA205H","address":"XX:XX:XX:XX:XX:XX","present":true,"paired":true,"trusted":true,"battery":87,"haptics":{"enabled":true,"intensity":100,"while_inking":true,"while_interacting":true,"ink_texture":"ink"},"buttons":{"single":"","double":"","long":""},"capabilities":{"pairing":"seamless-touch","battery":"ble-battery-service","buttons":{"barrel":true,"shortcut":true,"shortcut_gestures":["single","double","long"]},"haptics":{"waveforms":[{"ordinal":3,"name":"click","duration_ms":45,"continuous":false}]}}}}
+{"type":"pen.changed","pen":{"path":"/io/github/gonzalezerik/Px13Pen/pen/dev_00_01_02_03_04_05","name":"SA205H","address":"XX:XX:XX:XX:XX:XX","present":true,"paired":true,"trusted":true,"firmware":"2.0.37","battery":87,"haptics":{"enabled":true,"intensity":100,"while_inking":true,"while_interacting":true,"ink_texture":"ink"},"buttons":{"single":"","double":"","long":""},"capabilities":{"pairing":"seamless-touch","battery":"ble-battery-service","buttons":{"barrel":true,"shortcut":true,"shortcut_gestures":["single","double","long"]},"haptics":{"waveforms":[{"ordinal":3,"name":"click","duration_ms":45,"continuous":false}]}}}}
 ```
 
 ## Exit codes

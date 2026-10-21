@@ -638,10 +638,15 @@ fn describe(pen: &Pen) -> String {
     } else {
         "link down"
     };
+    // The pen's own firmware string, once the daemon has read it.
+    let firmware = pen
+        .firmware
+        .as_deref()
+        .map_or(String::new(), |text| format!(" · firmware {text}"));
     if pen.address.is_empty() {
-        format!("{state} · {battery}")
+        format!("{state} · {battery}{firmware}")
     } else {
-        format!("{} · {state} · {battery}", pen.address)
+        format!("{} · {state} · {battery}{firmware}", pen.address)
     }
 }
 
@@ -702,6 +707,7 @@ mod tests {
             present: true,
             paired: true,
             trusted: true,
+            firmware: None,
             battery: None,
             battery_detail: None,
             haptics: None,
@@ -728,6 +734,11 @@ mod tests {
         assert_eq!(describe(&pen), "<address> · connected · battery 87 %");
         pen.present = false;
         assert_eq!(describe(&pen), "<address> · link down · battery 87 %");
+        pen.firmware = Some("2.0.37".to_string());
+        assert_eq!(
+            describe(&pen),
+            "<address> · link down · battery 87 % · firmware 2.0.37"
+        );
     }
 
     #[test]
