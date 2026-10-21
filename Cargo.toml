@@ -7,6 +7,7 @@ members = [
     "crates/px13pend",
     "crates/px13penctl",
     "crates/px13pen-settings",
+    "crates/px13pen-tray",
     "crates/px13pen-pair-helper",
     "crates/xtask",
 ]
