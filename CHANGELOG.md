@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **A double press of the top button opens RNote out of the box**: the
+  `Buttons1.Double` default is now `rnote`, so a pen has somewhere to write the
+  second it pairs. Anything stored in `px13pen/buttons.conf` wins in both
+  directions: clearing the *Double press* entry in the settings window (or
+  writing an empty command over D-Bus) puts the gesture back to doing nothing.
 - **Release tarballs, so nobody has to compile**: `Containerfile.glibc` and
   `Containerfile.musl` gained `dist` stages that stage the install tree at
   `/usr/local` and bundle it with `install.sh` (tree + udev rule and bus policy

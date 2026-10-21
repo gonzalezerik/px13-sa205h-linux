@@ -45,7 +45,7 @@ One compact line:
 | `battery` | number or null | `Pen1.BatteryPercent`; `null` until the first reading (the wire's `-1`) |
 | `battery_detail` | object, or absent | `{"percent": number, "millivolts": number, "docked": bool}` from `Pen1.BatteryPercentPrecise`, `BatteryMillivolts` and `Docked`; `percent` and `millivolts` are absent until the first reading, and the whole object is absent when the daemon has none of the three |
 | `haptics` | object or null | `{"enabled": bool, "intensity": 0–100, "while_inking": bool, "while_interacting": bool, "hover_tick": bool, "ink_texture": string}`, or `null` when the pen does no haptics |
-| `buttons` | object, or absent | `{"single": string, "double": string, "long": string}` — the configured shortcut-button commands from `Buttons1` (empty = do nothing); absent when the pen has no shortcut button |
+| `buttons` | object, or absent | `{"single": string, "double": string, "long": string}` — the configured shortcut-button commands from `Buttons1` (empty = do nothing; a fresh install shows `rnote` on double); absent when the pen has no shortcut button |
 | `status_notifications` | `false`, or absent | `Notifications1.Enabled` — absent means on (the default); `false` says the daemon's idle/dock/wake notes are silenced (docs/settings.md) |
 | `capabilities` | object or null | `Pen1.Capabilities` projected to JSON; `null` only when the read failed |
 

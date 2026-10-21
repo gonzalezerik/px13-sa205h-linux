@@ -43,7 +43,9 @@ on for every card, haptics or not.
 A pen with the top shortcut button (`Buttons1` on its object) also
 gets a **Shortcut button** card: one entry per gesture — *Single
 press*, *Double press*, *Long press* — holding the shell command that
-gesture runs, empty meaning do nothing. Typing reveals a check button
+gesture runs, empty meaning do nothing. *Double press* starts out as
+`rnote` — a pen wants a note app the moment it pairs — and clearing
+the entry is how you take that back. Typing reveals a check button
 in the entry; pressing it or pressing Enter sends the command. The card
 says what the entries share: the
 pen's own Win+F18/19/20 key press still reaches the desktop whatever

@@ -93,12 +93,25 @@ pub fn config_path() -> Option<PathBuf> {
 
 /// The shortcut button policy: one shell command per top-button
 /// gesture, `""` meaning do nothing. The pen's own Win+F18/19/20 press
-/// reaches the compositor either way (docs/dbus.md §7).
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// reaches the compositor either way (docs/dbus.md §7). One gesture
+/// arrives bound out of the box: a double press opens RNote — a pen
+/// deserves a note app the moment it pairs, and any of the three can
+/// be rebound or cleared from the settings window.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ButtonSettings {
     pub single: String,
     pub double: String,
     pub long: String,
+}
+
+impl Default for ButtonSettings {
+    fn default() -> Self {
+        Self {
+            single: String::new(),
+            double: "rnote".to_string(),
+            long: String::new(),
+        }
+    }
 }
 
 /// Where the button file lives: `px13pen/buttons.conf`, same directory
@@ -116,8 +129,9 @@ fn config_dir() -> Option<PathBuf> {
     Some(root.join("px13pen"))
 }
 
-/// Read the button policy; a missing file is "no actions", and
-/// anything unparseable falls back key by key, like the haptics file.
+/// Read the button policy; a missing file is the shipped defaults
+/// (double press → RNote), and anything unparseable falls back key by
+/// key, like the haptics file.
 pub fn load_buttons() -> ButtonSettings {
     let Some(path) = button_config_path() else {
         return ButtonSettings::default();
@@ -460,7 +474,17 @@ mod tests {
     fn unknown_button_keys_are_ignored() {
         let settings = parse_buttons("single=ls\nmiddle=whatever\nnonsense\n");
         assert_eq!(settings.single, "ls");
-        assert_eq!(settings.double, "");
+        assert_eq!(settings.double, "rnote", "a line absent keeps the default");
+    }
+
+    #[test]
+    fn a_double_press_opens_rnote_until_told_otherwise() {
+        let settings = ButtonSettings::default();
+        assert_eq!(settings.double, "rnote");
+        assert!(settings.single.is_empty() && settings.long.is_empty());
+        // The file outranks the default in both directions: naming the
+        // key with an empty value is how a user silences the gesture.
+        assert!(parse_buttons("double=\n").double.is_empty());
     }
 
     #[test]

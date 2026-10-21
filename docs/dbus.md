@@ -202,8 +202,8 @@ one on any pen changes it for all of them.
 | Property | Type | Meaning |
 |---|---|---|
 | `Single` | `s` r/w | shell command run on a single press of the top button; empty (the default) does nothing |
-| `Double` | `s` r/w | command for a double press |
-| `Long` | `s` r/w | command for a long press |
+| `Double` | `s` r/w | command for a double press; a fresh install ships this as `rnote`, and an empty value silences the gesture |
+| `Long` | `s` r/w | command for a long press; empty does nothing |
 
 The command runs as `sh -c <command>` from the daemon's session, detached, and its exit
 status is not reported back. `ButtonEvent` (§5) fires whether or not a command is set —
