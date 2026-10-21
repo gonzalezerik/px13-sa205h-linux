@@ -57,6 +57,10 @@ Secondary Barrel Switch (0x5A) — 6 bits + 2 constant; X/Y (0x01/0x30,0x31) 16-
 17664×10496; Tip Pressure (0x30/0x0D) 0–4096; Battery Strength (0x3B) 0–255; X/Y Tilt (0x3D/0x3E)
 signed, ±90.00°; Azimuth (0x3F) 0–36000 (0.01°); Scan Time (0x56); Transducer Serial Number
 (0x5B, 32-bit); Transducer Vendor ID (0x91, 16-bit, min 1); + 2 vendor bytes (0xFF00/0x01).
+**Byte positions [VERIFIED-HW]** (Linux capture, findings/006 §3): with the report id as byte 0,
+the serial occupies bytes 17..21 (little-endian, valid while In Range is set) and the vendor
+follows at 21..23 (`0x330A`); report 34 repeats the same number at bytes 1..5. This is the
+identity `px13pend` matches pens by (docs/decisions.md).
 **No haptics page (0x0E) anywhere on this device** — pen haptics live on the pen's Bluetooth HID
 side (see `docs/protocol/haptics.md`). Kernel: "Stylus" node event9 (VERIFIED-HW).
 

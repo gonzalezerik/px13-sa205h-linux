@@ -95,7 +95,10 @@ once a kernel has it, the host sends a random key and pairs out-of-band with no 
   the next touch within about two minutes. Keep the scan armed and react to the next announcement.
 - **Already connected.** The digitizer keeps announcing a pen in range even while that pen is
   connected under another identity, so "already connected" must be decided by something stable (the
-  transducer serial, present on both links), not by the announced address.
+  transducer serial, present on both links), not by the announced address. `px13pend` does exactly
+  that: reports 7/34 name the serial of the pen in range, the pen's feature `0x40` names a
+  connected pen's, and an announcement carrying a paired pen's serial pairs nothing
+  (docs/decisions.md).
 - **Button pairing mode** (hold the top button until the LED blinks white) makes the pen advertise
   under a fresh identity any host can pair with ordinary BlueZ. Manual fallback only.
 

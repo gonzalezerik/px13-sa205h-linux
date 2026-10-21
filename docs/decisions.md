@@ -238,3 +238,28 @@ handle, so what Windows actually sent is unknown. Two consequences:
   that for every effect, ink arming and ticks alike. Windows' own
   per-effect values are *labelled unknown* rather than guessed: an
   unlabeled invention is worse than a row with a gap in it.
+
+## 2026-10-21: a pen's identity is its transducer serial
+
+Both ends repeat a pen's 32-bit transducer serial: the digitizer's
+input reports 7 and 34 name the serial of the pen in range over the
+screen — byte-for-byte verified from the Linux capture (findings/006
+§3) — and the pen answers its Bluetooth feature report `0x40` with the
+same number (findings/006 §2). The Bluetooth address is not identity:
+a dual-boot pen bonds a fresh one per host and goes on announcing the
+identity the other host bonded, so an address-keyed daemon chases a
+pen it already has (the failed-retry loop of 2026-10-18). So:
+
+- `px13pend` reads feature `0x40` once per connected pen — one plain
+  GATT read of the characteristic whose Report Reference names that
+  feature — and remembers the serial as long as the pen is known. An
+  announcement whose serial matches a pen already paired here pairs
+  nothing, even while that pen's link is down: asleep is not gone.
+- Announcements identity cannot place behave exactly as before: quiet
+  while any pen holds a live link, seamless pairing otherwise. A
+  second, genuinely different pen therefore changes nothing yet;
+  multiple pens stay a future item with their own per-pen settings.
+- Reading a HID *feature* through BlueZ's HID profile had never been
+  exercised on Linux. A pen that answers nothing simply leaves the
+  daemon in the old conservative behaviour; nothing else depends on
+  the read.

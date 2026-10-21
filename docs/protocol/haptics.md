@@ -175,8 +175,11 @@ Full evidence, including the felt-impressions panel and per-test timelines:
    then continuous ink/pencil/marker/chisel/brush/eraser/sparkle; durations (ms)
    `[45, 60, 60, 35, 145, 185, 1995, 1995, 1995, 1995, 1980, 1995, 1980]` — continuous entries are
    ≈2 s, **not 0** (§1 annotation). **Feature `0x41`** (current state): repeat 0, intensity `FF`,
-   auto-trigger 1, retrigger 0. **Feature `0x40`**: pen identity (transducer serial + vendor
-   `0x330A`, `0x0C0F`, `0x0003`).
+   auto-trigger 1, retrigger 0. **Feature `0x40`**: pen identity — report id, then the 32-bit
+   transducer serial and the 16-bit vendor `0x330A` little-endian, then `0x0C0F`, `0x0003`,
+   zero-padded (`40 <serial:4> 0A 33 0F 0C 03 00 …`). The serial is byte-for-byte what the
+   digitizer's report 7 streams, which is how one physical pen is recognised across its two
+   Bluetooth identities (`crates/px13pend/src/identity.rs`, findings/006 §2–3).
 4. **The device auto-triggers on the tip switch**: the same continuous report is felt as nothing in
    the air and as "writing on paper" while drawing — the host arms the configuration and the pen
    decides when to play, exactly the §1 "host never uses Auto Trigger" model with the device-side
