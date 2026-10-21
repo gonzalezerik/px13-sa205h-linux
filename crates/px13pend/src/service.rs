@@ -31,6 +31,7 @@ use px13pen_core::haptics::{
 };
 use px13pen_core::seamless;
 
+use crate::identity;
 use crate::ink;
 use crate::settings::{self, HapticsSettings};
 use crate::shortcut::{self, Gesture};
@@ -150,6 +151,7 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         buttons: Arc::new(Mutex::new(settings::load_buttons())),
         ink: Mutex::new(ink::Arming::default()),
         hover: Mutex::new(ink::HoverOut::default()),
+        hover_serial: Mutex::new(identity::HoverSerial::default()),
         status: Arc::new(Mutex::new(settings::load_status())),
         tracker: Mutex::new(status::Tracker::default()),
         status_note_id: AtomicU32::new(0),
@@ -312,6 +314,9 @@ struct State {
     /// The digitizer's report 7 fed through the hover-out edge, for
     /// the opt-in hover tick (docs/haptics.md).
     hover: Mutex<ink::HoverOut>,
+    /// The serial of the hovering pen, from the digitizer's pen
+    /// reports, used to place announcements by identity (identity.rs).
+    hover_serial: Mutex<identity::HoverSerial>,
     /// The status notification switch every pen shares, from the user's
     /// config file (docs/settings.md).
     status: Arc<Mutex<settings::StatusSettings>>,
@@ -339,6 +344,13 @@ struct PenEntry {
     /// the pen again (a failed GATT read earns a wait, not a retry
     /// every tick).
     firmware_due: Instant,
+    /// The pen's transducer serial, read once while it was connected
+    /// from its identity feature. It outlives the link: it is what
+    /// recognises the pen's other identities while it sleeps
+    /// (identity.rs).
+    serial: Option<u32>,
+    /// Not before this instant will the identity feature be read again.
+    serial_due: Instant,
 }
 
 /// What the capability dict is built from: a seamless-pairing digitizer,
@@ -543,6 +555,7 @@ impl State {
             if locked(&self.hover).on_frame(&frame) {
                 self.hover_tick();
             }
+            locked(&self.hover_serial).on_frame(&frame);
             if pen_in_range(&frame) {
                 self.arm_scan().await;
                 continue;
@@ -654,8 +667,11 @@ impl State {
         self.put_listener(device);
     }
 
-    /// One announcement: skip a pen that is already on a live link, keep a
-    /// short pause per address, else pair and tell the user right away.
+    /// One announcement: place it by identity first — the pen in range
+    /// announcing a paired pen's serial is that pen waving an old card
+    /// (identity.rs), and its address is nobody worth pairing. Then
+    /// keep a short pause per address, else pair and tell the user
+    /// right away.
     async fn on_announcement(
         &self,
         daemon: &InterfaceRef<Daemon>,
@@ -664,10 +680,30 @@ impl State {
         let Some(agent) = self.agent.clone() else {
             return Ok(());
         };
-        if crate::pairing::any_pen_connected(&self.bluez, &self.adapter).await {
-            return Ok(());
-        }
         let address = note.address_string();
+        let choice = {
+            let hovering = locked(&self.hover_serial).hovering();
+            let known: Vec<identity::Known> = locked(&self.pens)
+                .values()
+                .map(|entry| {
+                    let values = locked(&entry.data);
+                    identity::Known {
+                        paired: values.paired,
+                        present: values.present,
+                        serial: entry.serial,
+                    }
+                })
+                .collect();
+            identity::announce_choice(hovering, known)
+        };
+        match choice {
+            identity::Choice::SamePen => {
+                eprintln!("ignoring announcement for {address}: a paired pen's other identity");
+                return Ok(());
+            }
+            identity::Choice::Busy => return Ok(()),
+            identity::Choice::Pair => {}
+        }
         let failed_before = {
             let mut attempts = locked(&self.attempts);
             if attempts
@@ -834,10 +870,11 @@ impl State {
     async fn sync_pens(&self, daemon: &InterfaceRef<Daemon>, announce: bool) -> Result<(), String> {
         let observed = self.scan_pens().await?;
         let now = Instant::now();
-        let (installs, removals, updates, firmware_reads, notes) = {
+        let (installs, removals, updates, firmware_reads, serial_reads, notes) = {
             let mut installs: Vec<PendingInstall> = Vec::new();
             let mut updates: Vec<(String, Diff)> = Vec::new();
             let mut firmware_reads: Vec<(String, Arc<Mutex<PenValues>>, String)> = Vec::new();
+            let mut serial_reads: Vec<String> = Vec::new();
             let mut notes: Vec<(String, Note)> = Vec::new();
             let mut current = locked(&self.pens);
             let mut tracker = locked(&self.tracker);
@@ -899,6 +936,10 @@ impl State {
                             entry.px13pend_path.clone(),
                         ));
                     }
+                    if observation.present && entry.serial.is_none() && entry.serial_due <= now {
+                        entry.serial_due = now + RETRY_AFTER;
+                        serial_reads.push(observation.bluez_path.clone());
+                    }
                 } else {
                     let px13pend_path = pen_object_path(&observation.bluez_path);
                     // A first sighting never notes: a new pen arrives
@@ -922,6 +963,7 @@ impl State {
                             Arc::clone(&data),
                             px13pend_path.clone(),
                         ));
+                        serial_reads.push(observation.bluez_path.clone());
                     }
                     current.insert(
                         observation.bluez_path.clone(),
@@ -932,11 +974,20 @@ impl State {
                             // Read on the next sight while present; a
                             // miss waits out the retry from right now.
                             firmware_due: now + RETRY_AFTER,
+                            serial: None,
+                            serial_due: now + RETRY_AFTER,
                         },
                     );
                 }
             }
-            (installs, removals, updates, firmware_reads, notes)
+            (
+                installs,
+                removals,
+                updates,
+                firmware_reads,
+                serial_reads,
+                notes,
+            )
         };
 
         for px13pend_path in removals {
@@ -1051,6 +1102,19 @@ impl State {
                     },
                 )
                 .await?;
+            }
+        }
+        // One plain GATT read of the identity feature per pen that
+        // still owes its serial, awaited while its link is up. The
+        // number outlives the link: it is what recognises the pen's
+        // other identities while it sleeps (identity.rs).
+        for bluez_path in serial_reads {
+            let Ok(serial) = crate::peninfo::transducer_serial(&self.bluez, &bluez_path).await
+            else {
+                continue;
+            };
+            if let Some(entry) = locked(&self.pens).get_mut(&bluez_path) {
+                entry.serial = Some(serial);
             }
         }
         for (px13pend_path, note) in notes {

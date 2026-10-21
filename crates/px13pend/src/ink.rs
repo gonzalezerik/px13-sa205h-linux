@@ -35,7 +35,7 @@ pub enum Action {
 }
 
 /// Report 7 button byte: pen in range.
-const IN_RANGE: u8 = 0x01;
+pub(crate) const IN_RANGE: u8 = 0x01;
 /// Report 7 button byte: tip touching.
 const TIP_CONTACT: u8 = 0x02;
 /// Report 7 button byte: eraser end touching (the pen inverted).
