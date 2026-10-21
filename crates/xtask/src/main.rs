@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! cargo xtask generate-udev-rules [--check]
-//! cargo xtask install
+//! cargo xtask install [--headless]
 //! ```
 //!
 //! `generate-udev-rules` rewrites the shipped udev rule from the device
@@ -11,7 +11,9 @@
 //! fails instead of writing and is what CI runs. `install` places the
 //! binaries and the service files under `$PREFIX` (default `/usr/local`,
 //! `$DESTDIR` honoured) and substitutes the prefix into the files that
-//! reference it.
+//! reference it. `--headless` skips the settings window and its desktop
+//! entry: musl links have no GTK to build it against, so the musl release
+//! tarballs ship the headless half (docs/decisions.md).
 
 use std::env;
 use std::fs;
@@ -33,9 +35,9 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("generate-udev-rules") => generate_udev_rules(args.iter().any(|arg| arg == "--check")),
-        Some("install") => install(),
+        Some("install") => install(args.iter().any(|arg| arg == "--headless")),
         _ => {
-            eprintln!("usage: cargo xtask <generate-udev-rules [--check] | install>");
+            eprintln!("usage: cargo xtask <generate-udev-rules [--check] | install [--headless]>");
             process::exit(2);
         }
     };
@@ -102,7 +104,7 @@ fn generate_udev_rules(check_only: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn install() -> Result<(), String> {
+fn install(headless: bool) -> Result<(), String> {
     let prefix = env_or("PREFIX", "/usr/local");
     let destdir = env::var("DESTDIR").unwrap_or_default();
     let bindir = env_or("BINDIR", &format!("{prefix}/bin"));
@@ -146,7 +148,6 @@ fn install() -> Result<(), String> {
     for (binary, dir) in [
         ("px13pend", &bindir),
         ("px13penctl", &bindir),
-        ("px13pen-settings", &bindir),
         ("px13pen-tray", &bindir),
         ("px13pen-pair-helper", &libexecdir),
     ] {
@@ -208,25 +209,32 @@ fn install() -> Result<(), String> {
         None,
     )?;
 
-    // Settings window entry and icon, next to where buildRustPackage
-    // already puts them from the crate's own data directory.
-    let settings_data = root.join("crates/px13pen-settings/data");
-    install_file(
-        &settings_data.join("io.github.gonzalezerik.Px13Pen.Settings.desktop"),
-        &staged(&destdir, &format!("{prefix}/share/applications")),
-        0o644,
-        Some(&prefix),
-    )?;
-    install_file(
-        &settings_data
-            .join("icons/hicolor/scalable/apps/io.github.gonzalezerik.Px13Pen.Settings.svg"),
-        &staged(
-            &destdir,
-            &format!("{prefix}/share/icons/hicolor/scalable/apps"),
-        ),
-        0o644,
-        None,
-    )?;
+    // The settings window, its menu entry and its icon: present in the
+    // glibc install only. Headless installs (the musl tarballs) were built
+    // without the crate, so there is nothing to place.
+    if !headless {
+        install_binary(
+            &target_dir.join("px13pen-settings"),
+            &staged(&destdir, &bindir),
+        )?;
+        let settings_data = root.join("crates/px13pen-settings/data");
+        install_file(
+            &settings_data.join("io.github.gonzalezerik.Px13Pen.Settings.desktop"),
+            &staged(&destdir, &format!("{prefix}/share/applications")),
+            0o644,
+            Some(&prefix),
+        )?;
+        install_file(
+            &settings_data
+                .join("icons/hicolor/scalable/apps/io.github.gonzalezerik.Px13Pen.Settings.svg"),
+            &staged(
+                &destdir,
+                &format!("{prefix}/share/icons/hicolor/scalable/apps"),
+            ),
+            0o644,
+            None,
+        )?;
+    }
 
     println!();
     println!("Installed under {destdir}{prefix}. If udev is running:");

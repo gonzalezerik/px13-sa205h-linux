@@ -113,6 +113,25 @@ is already there: no replug, and no hand-typed `udevadm trigger`.
 The overlay (`overlays.default`) exposes `pkgs.px13-sa205h-linux` for systems that want it in the package
 set directly; `nixosModules.px13-sa205h-linux` is the same module for those systems.
 
+## Prebuilt tarballs
+
+Both Containerfiles end in a `dist` stage that stages the install tree at
+`PREFIX=/usr/local` (`cargo xtask install`, with `--headless` for the musl tree —
+no settings window there, see docs/decisions.md) and bundles it with
+`tools/dist/install.sh` and `tools/dist/README-INSTALL.md` into
+`px13-sa205h-linux-<version>-<arch>-<libc>.tar.gz`. A release publishes all four
+tarballs plus `SHA256SUMS`.
+
+`install.sh` is `cargo xtask install`'s output plus the steps below done as root:
+the rule and the helper's bus policy are *also* placed under `/etc` (always read,
+and the only writable place for them on immutable systems), the polkit action is
+symlinked into `/usr/share/polkit-1/actions` best effort (it gates only the
+pairing helper, which touch-to-pair never calls), then `udevadm` reload +
+`--action=change` over `hidraw` and `systemctl --global preset`. The glibc
+tarball's floor is the build image's libraries (glibc ≥ 2.41, libadwaita ≥ 1.6);
+the musl binaries are static and run on any distro with systemd and BlueZ.
+[docs/install.md](install.md) is the user-facing guide per distro family.
+
 ## Distribution packages
 
 The layout above is the contract: a `.deb`/`.rpm` post-install scriptlet needs
@@ -126,5 +145,6 @@ each user's next login; nothing is enabled system-wide.
 BlueZ service and `/dev/hidraw` device access under the conventions above, which the
 sandboxing models are not built for. `px13pen-settings` is a candidate for a future Flatpak since
 it only talks to `io.github.gonzalezerik.Px13Pen.Daemon1` on the session bus. On immutable distros the
-NixOS module (Bazzite/NixOS) or an rpm-ostree layer of the package is the way; installing
-into `$HOME` alone cannot register the udev rule.
+NixOS module (Bazzite/NixOS), the musl tarball's `install.sh` (it writes only
+`/usr/local` and `/etc`, both writable there) or an rpm-ostree layer of the package is the way;
+installing into `$HOME` alone cannot register the udev rule.

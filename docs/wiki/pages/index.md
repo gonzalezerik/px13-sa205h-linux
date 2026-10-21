@@ -11,8 +11,10 @@ findings and driver analysis; the evidence lives in the repository's
 **"Does it work on Linux, and how do I get it?"** — the
 [devices page](devices.md) pins down exactly which hardware every claim
 here covers; for what runs on it today, the repository's README status
-section and `docs/parity.md` are the live lists, and `docs/packaging.md`
-covers installation (NixOS module, udev, D-Bus activation).
+section and `docs/parity.md` are the live lists, `docs/packaging.md`
+covers installation (NixOS module, udev, D-Bus activation), and
+`docs/install.md` walks owners of other distros through the prebuilt
+glibc and musl tarballs.
 
 **"How does the pen actually work?"** — start with the two links in the
 [Bluetooth reference](reference/bluetooth.md) and the

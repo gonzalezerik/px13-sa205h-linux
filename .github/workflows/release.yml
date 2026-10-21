@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Release artifacts: pushing a v* tag builds the four dist tarballs
+# (glibc and musl, x86_64 and aarch64, each natively like CI) and attaches
+# them with checksums to a GitHub Release. The tarballs carry install.sh
+# and README-INSTALL.md; docs/install.md covers each distro's steps.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  dist:
+    name: ${{ matrix.libc }} / ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        libc: [glibc, musl]
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - name: podman
+        run: command -v podman || (sudo apt-get update && sudo apt-get install -y podman)
+      - name: build the tarball
+        run: |
+          podman build -f container/Containerfile.${{ matrix.libc }} --target dist \
+            --build-arg VERSION="${GITHUB_REF_NAME#v}" -t dist .
+          id=$(podman create dist)
+          podman cp "$id:/px13-sa205h-linux-${GITHUB_REF_NAME#v}-$(uname -m)-${{ matrix.libc }}.tar.gz" .
+          podman rm "$id"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball-${{ matrix.libc }}-${{ matrix.arch }}
+          path: "*.tar.gz"
+
+  release:
+    needs: dist
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tarball-*
+          merge-multiple: true
+          path: dist
+      - name: checksums
+        run: (cd dist && sha256sum ./*.tar.gz > SHA256SUMS)
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

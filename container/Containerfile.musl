@@ -30,3 +30,16 @@ RUN rustup component add clippy rustfmt \
 FROM ${RUNTIME_IMAGE} AS runtime
 COPY --from=build /src/target/release/px13pend /src/target/release/px13penctl /usr/local/bin/
 ENTRYPOINT ["/usr/local/bin/px13pend"]
+
+# Distribution tarball: the headless install tree (no settings window,
+# docs/decisions.md) staged at /usr/local plus the install script.
+#   podman build -f container/Containerfile.musl --target dist -t dist .
+#   podman cp $(podman create dist):/px13-sa205h-linux-dev-x86_64-musl.tar.gz .
+FROM build AS dist
+ARG VERSION=dev
+RUN D="px13-sa205h-linux-${VERSION}-$(uname -m)-musl" \
+ && DESTDIR=/pkg PREFIX=/usr/local cargo run --locked -p xtask -- install --headless \
+ && cp tools/dist/install.sh tools/dist/README-INSTALL.md /pkg/ \
+ && chmod 755 /pkg/install.sh \
+ && mkdir /out && mv /pkg "/out/$D" \
+ && tar -czf "/$D.tar.gz" -C /out "$D"

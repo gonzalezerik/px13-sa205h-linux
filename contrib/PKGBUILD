@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Arch packaging. The systemd pacman hook applies the shipped user preset
+# and reloads udev rules on install, so `makepkg -si` is the whole setup.
+# Until the repository is public, build from your checkout instead of
+# fetching:  makepkg --skipfetch after cloning, or simply
+#   cargo build --release --locked --workspace && sudo cargo xtask install
+pkgname=px13-sa205h-linux
+pkgver=0.0.1
+pkgrel=1
+pkgdesc='Linux support for the ASUS Pen 3.0 (SA205H) on the ASUS ProArt PX13: touch-to-pair, haptics, battery, top button'
+arch=(x86_64 aarch64)
+url='https://github.com/gonzalezerik/px13-sa205h-linux'
+license=(AGPL3)
+depends=(bluez gtk4 libadwaita)
+makedepends=(cargo git)
+source=("$pkgname::git+$url#tag=v$pkgver")
+sha256sums=(SKIP)
+
+build() {
+  cd $pkgname
+  cargo build --release --locked --workspace
+}
+
+package() {
+  cd $pkgname
+  DESTDIR="$pkgdir" PREFIX=/usr cargo xtask install
+}

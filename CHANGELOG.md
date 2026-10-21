@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **Release tarballs, so nobody has to compile**: `Containerfile.glibc` and
+  `Containerfile.musl` gained `dist` stages that stage the install tree at
+  `/usr/local` and bundle it with `install.sh` (tree + udev rule and bus policy
+  into `/etc` + preset + udev reload — it writes only places immutable systems
+  keep writable); `cargo xtask install --headless` produces the musl tree
+  without the settings window; a tagged release publishes glibc and musl
+  tarballs for x86_64 and aarch64 with `SHA256SUMS`; `docs/install.md` walks
+  Fedora/RHEL, Debian/Ubuntu, Arch (a `contrib/PKGBUILD` came with it),
+  openSUSE, Alpine, Nix and the immutable systems through installing it.
 - **The wiki grew its content pages** — reference pages for the digitizer and the pen's
   Bluetooth side (every layout confidence-labelled), five flow pages with sequence
   listings, the Windows host-stack map, capture recipes, device identity, conventions,

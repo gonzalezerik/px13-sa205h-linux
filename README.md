@@ -155,8 +155,9 @@ px13pen-tray                  # tray icon (starts with the session; docs/tray.md
 ```
 
 The daemon needs read/write access to the digitizer's `/dev/hidraw*` node and the system
-D-Bus (BlueZ). Installing the package — `make install`, the flake, or the NixOS module — is
-the whole setup: a generated uaccess rule hands the signed-in user the pen-related nodes,
+D-Bus (BlueZ). Installing the package — the prebuilt tarball from the releases page plus its
+`install.sh` ([docs/install.md](docs/install.md) walks each distro through it),
+`make install`, the flake, or the NixOS module — is the whole setup: a generated uaccess rule hands the signed-in user the pen-related nodes,
 and `px13pend` starts with the graphical session (a systemd user preset the packaging applies).
 Pairing needs no privilege and no prompt: a new pen pairs as soon as it comes near the screen,
 with a desktop notification the moment it is bonded.
