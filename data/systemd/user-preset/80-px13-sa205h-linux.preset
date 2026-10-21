@@ -1,3 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Start the per-user daemon with every graphical session.
+# Start the per-user daemon and the tray icon with every graphical
+# session.
 enable px13pend.service
+enable px13pen-tray.service

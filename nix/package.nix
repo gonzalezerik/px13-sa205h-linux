@@ -66,6 +66,10 @@ rustPlatform.buildRustPackage {
       $out/lib/systemd/user/px13pend.service
     substituteInPlace $out/lib/systemd/user/px13pend.service \
       --replace-fail "@PREFIX@" "$out"
+    install -Dm644 data/systemd/user/px13pen-tray.service \
+      $out/lib/systemd/user/px13pen-tray.service
+    substituteInPlace $out/lib/systemd/user/px13pen-tray.service \
+      --replace-fail "@PREFIX@" "$out"
     install -Dm644 data/systemd/user-preset/80-px13-sa205h-linux.preset \
       $out/lib/systemd/user-preset/80-px13-sa205h-linux.preset
 

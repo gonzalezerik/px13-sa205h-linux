@@ -35,7 +35,7 @@
       # carry px13-sa205h-linux in their package set.
       nixosModules.px13-sa205h-linux = { config, lib, pkgs, ... }: {
         options.services.px13-sa205h-linux.enable =
-          lib.mkEnableOption "PX13 SA205H Linux (px13pend daemon and pen settings)";
+          lib.mkEnableOption "PX13 SA205H Linux (px13pend daemon, pen settings and tray icon)";
 
         config = lib.mkIf config.services.px13-sa205h-linux.enable {
           environment.systemPackages = [ pkgs.px13-sa205h-linux ];
@@ -49,10 +49,12 @@
           services.dbus.packages = [ pkgs.px13-sa205h-linux ];
 
           # px13pen-pair-helper.service (D-Bus activated, no [Install]) and
-          # px13pend.service, which starts with every graphical session so the
-          # touch-to-pair listener is up before the pen comes near.
+          # the session pair: px13pend.service, which starts with every
+          # graphical session so the touch-to-pair listener is up before the
+          # pen comes near, and px13pen-tray.service showing its icon.
           systemd.packages = [ pkgs.px13-sa205h-linux ];
           systemd.user.services.px13pend.wantedBy = [ "graphical-session.target" ];
+          systemd.user.services.px13pen-tray.wantedBy = [ "graphical-session.target" ];
         };
       };
 

@@ -161,3 +161,25 @@ no grab, no race with the compositor at session start — the grab-first design 
 compositor that grabs on startup and stays off the table unless a compositor-side interface
 appears. An action and a compositor-side key binding for the same gesture fire twice; the
 settings window says so, because the pen's key press is the pen's, not ours to hide.
+
+## 2026-10-21: the tray's open numbers get set
+
+`px13pen-tray` lands (docs/tray.md), which settles what 2026-10-18 left
+open:
+
+- **Grace period: 60 s.** The measured idle drop is 6–15 s after the pen is
+  set down (findings/010 §4), so hiding the moment a link drops would
+  blink the icon on every short pause; a minute covers how the pen is
+  actually picked up and put back down.
+- **A pen asleep on its charger hides exactly like one asleep on the
+  desk.** The icon means "a pen is live right now"; a docked pen has no
+  link to report, so there is no separate charging state. Its menu and
+  tooltip rows still say "On charger" whenever another pen keeps the icon
+  up.
+- **Intensity presets: Low 25 %, Medium 50 %, High 100 %.** Three named
+  values in the menu, each written as-is to `Haptics1.Intensity`; the
+  settings window keeps the free 0–100 % slider.
+- Hidden means `StatusNotifierItem` `Status=Passive`, and the
+  accessibility gate (`crates/px13pen-tray/tests/a11y.rs`) landed before
+  the tray: labels in words, battery by icon shape, state as check mark
+  or radio dot — never by colour.

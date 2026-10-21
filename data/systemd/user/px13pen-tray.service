@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# The pen's tray icon. It starts with the graphical session, next to
+# the px13pend it follows (whose session-bus activation answers even
+# when the daemon starts after this unit), and the preset in
+# lib/systemd/user-preset enables it on install. A desktop without a
+# status-notifier host is not an error: the tray waits for one to
+# appear. @PREFIX@ is substituted at install time.
+
+[Unit]
+Description=PX13 SA205H Linux tray icon
+Documentation=https://github.com/gonzalezerik/px13-sa205h-linux
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=@PREFIX@/bin/px13pen-tray
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

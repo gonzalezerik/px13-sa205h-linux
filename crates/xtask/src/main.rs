@@ -147,6 +147,7 @@ fn install() -> Result<(), String> {
         ("px13pend", &bindir),
         ("px13penctl", &bindir),
         ("px13pen-settings", &bindir),
+        ("px13pen-tray", &bindir),
         ("px13pen-pair-helper", &libexecdir),
     ] {
         install_binary(&target_dir.join(binary), &staged(&destdir, dir))?;
@@ -195,6 +196,12 @@ fn install() -> Result<(), String> {
         Some(&prefix),
     )?;
     install_file(
+        &data.join("systemd/user/px13pen-tray.service"),
+        &staged(&destdir, &systemd_user_unit_dir),
+        0o644,
+        Some(&prefix),
+    )?;
+    install_file(
         &data.join("systemd/user-preset/80-px13-sa205h-linux.preset"),
         &staged(&destdir, &systemd_user_preset_dir),
         0o644,
@@ -224,8 +231,8 @@ fn install() -> Result<(), String> {
     println!();
     println!("Installed under {destdir}{prefix}. If udev is running:");
     println!("  udevadm control --reload-rules && udevadm trigger");
-    println!("Then apply the user preset once, so px13pend starts with every session:");
-    println!("  systemctl --global preset px13pend.service");
+    println!("Then apply the user preset once, so px13pend and the tray start with every session:");
+    println!("  systemctl --global preset px13pend.service px13pen-tray.service");
     println!("(distro packaging macros do this on install). The pairing helper");
     println!("needs nothing: the system bus activates it when first called.");
     Ok(())

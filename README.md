@@ -62,6 +62,7 @@ its sources are still linted there (see [docs/decisions.md](docs/decisions.md)).
 | `crates/px13pend` | the daemon (hidraw + BlueZ, D-Bus API) |
 | `crates/px13penctl` | command-line client |
 | `crates/px13pen-settings` | settings window (GTK 4 / libadwaita) |
+| `crates/px13pen-tray` | tray icon (StatusNotifierItem + dbusmenu) |
 | `container/` | podman Containerfiles: `Containerfile.glibc` (Debian), `Containerfile.musl` (Alpine) |
 | `docs/` | protocol write-ups, parity matrix, decisions |
 | `findings/` | dated research notes |
@@ -82,7 +83,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 
-nix build                 # release build (glibc) → ./result/bin/{px13pend,px13penctl,px13pen-settings}
+nix build                 # release build (glibc) → ./result/bin/{px13pend,px13penctl,px13pen-settings,px13pen-tray}
 nix flake check           # what CI's nix job runs
 ```
 
@@ -118,7 +119,7 @@ Rust 1.89 or newer. `px13pen-settings` builds against the system GTK 4 and libad
 Fedora, `gtk4-dev libadwaita-dev` on Alpine); the daemon and CLI need nothing else:
 
 ```sh
-cargo build --release --workspace     # → target/release/{px13pend,px13penctl,px13pen-settings}
+cargo build --release --workspace     # → target/release/{px13pend,px13penctl,px13pen-settings,px13pen-tray}
 ```
 
 Before every commit run the checks in [CONTRIBUTING.md](CONTRIBUTING.md) §3, and install
@@ -139,6 +140,7 @@ px13pend haptic --list        # the pen's effect table (ordinals from its capabi
 px13pend haptic click --send  # one click buzz on the paired pen; without --send only the exact
                           # output-report bytes are printed
 px13pen-settings              # settings window (GTK 4; needs a running px13pend)
+px13pen-tray                  # tray icon (starts with the session; docs/tray.md)
 ```
 
 The daemon needs read/write access to the digitizer's `/dev/hidraw*` node and the system

@@ -12,7 +12,7 @@ overridden individually for distro layouts.
 
 | Destination (under `DESTDIR` + `PREFIX` unless noted) | File |
 |---|---|
-| `bin/` | `px13pend`, `px13penctl`, `px13pen-settings` |
+| `bin/` | `px13pend`, `px13penctl`, `px13pen-settings`, `px13pen-tray` |
 | `libexec/` | `px13pen-pair-helper` (privileged, not a command) |
 | `lib/udev/rules.d/` | `70-px13-sa205h-linux.rules` (generated, see below) |
 | `share/dbus-1/system-services/` | `io.github.gonzalezerik.Px13Pen.PairHelper1.service` (system activation) |
@@ -20,8 +20,8 @@ overridden individually for distro layouts.
 | `share/dbus-1/services/` | `io.github.gonzalezerik.Px13Pen.Daemon1.service` (session activation) |
 | `share/polkit-1/actions/` | `io.github.gonzalezerik.Px13Pen.policy` |
 | `lib/systemd/system/` | `px13pen-pair-helper.service` (D-Bus activated, no `[Install]`) |
-| `lib/systemd/user/` | `px13pend.service` (starts with the graphical session) |
-| `lib/systemd/user-preset/` | `80-px13-sa205h-linux.preset` (`enable px13pend.service`) |
+| `lib/systemd/user/` | `px13pend.service`, `px13pen-tray.service` (start with the graphical session) |
+| `lib/systemd/user-preset/` | `80-px13-sa205h-linux.preset` (`enable` both) |
 | `share/applications/`, `share/icons/` | settings window entry and icon |
 
 Overridable variables: `BINDIR`, `LIBEXECDIR`, `UDEVRULESDIR`, `DBUS_SYSTEM_SERVICES_DIR`,
@@ -34,11 +34,12 @@ preset once:
 
 ```sh
 udevadm control --reload-rules && udevadm trigger
-systemctl --global preset px13pend.service
+systemctl --global preset px13pend.service px13pen-tray.service
 ```
 
 Distribution packaging does both from its usual install hooks, so users run neither. From
-then on `px13pend` starts with every graphical session: the touch-to-pair listener has to be
+then on `px13pend` and the tray icon start with every graphical session: the touch-to-pair
+listener has to be
 up before a new pen first comes near the screen, which is why it does not wait for a D-Bus
 call (session activation still starts it on demand where the preset was not applied). The
 pairing helper is activated by the system bus when first called (`Type=dbus`) and needs
@@ -99,8 +100,8 @@ The flake's module is the zero-config path there:
 
 It puts the package in the system profile and registers the same files the tarball ships:
 `services.udev.packages`, `services.dbus.packages` (activation + policy), `systemd.packages`
-(units) with `px13pend` wanted by `graphical-session.target`, and the polkit action via the
-standard data dirs. The overlay
+(units) with `px13pend` and `px13pen-tray` wanted by `graphical-session.target`, and the
+polkit action via the standard data dirs. The overlay
 (`overlays.default`) exposes `pkgs.px13-sa205h-linux` for systems that want it in the package
 set directly; `nixosModules.px13-sa205h-linux` is the same module for those systems.
 
@@ -109,9 +110,9 @@ set directly; `nixosModules.px13-sa205h-linux` is the same module for those syst
 The layout above is the contract: a `.deb`/`.rpm` post-install scriptlet needs
 `udevadm control --reload-rules && udevadm trigger`, a polkit/DBus reload
 (`systemctl reload polkit dbus`, or they re-read on next activation) and the user preset
-(`%systemd_user_post px13pend.service` on Fedora, `dh_installsystemduser` on Debian — both apply
-`80-px13-sa205h-linux.preset`). `px13pend` then starts at each user's next login; nothing is
-enabled system-wide.
+(`%systemd_user_post px13pend.service px13pen-tray.service` on Fedora, `dh_installsystemduser`
+on Debian — both apply `80-px13-sa205h-linux.preset`). `px13pend` and the tray then start at
+each user's next login; nothing is enabled system-wide.
 
 **Flatpak/Snap**: `px13pend` cannot live in either — it needs the session D-Bus, the system
 BlueZ service and `/dev/hidraw` device access under the conventions above, which the
