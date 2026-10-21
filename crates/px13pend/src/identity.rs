@@ -20,8 +20,6 @@
 const REPORT_PEN: u8 = 0x07;
 /// Digitizer report id of the pen-presence telemetry report.
 const REPORT_PRESENCE: u8 = 0x22;
-/// Pen feature report carrying its identity.
-pub(crate) const FEATURE_IDENTITY: u8 = 0x40;
 /// The transducer vendor that report 7 and feature `0x40` agree on.
 const VENDOR: u16 = 0x330A;
 /// End of the serial inside a report 7 frame (report id included):
@@ -194,7 +192,7 @@ mod tests {
     fn the_identity_feature_answers_the_digitizers_number() {
         // The shape Windows read off the pen (findings/006 §2): report
         // id, serial, vendor, a model number, then padding.
-        let mut with_id = vec![FEATURE_IDENTITY];
+        let mut with_id = vec![0x40];
         with_id.extend(SYNTHETIC.to_le_bytes());
         with_id.extend([0x0A, 0x33, 0x0F, 0x0C, 0x03, 0x00]);
         with_id.resize(81, 0);
@@ -204,6 +202,20 @@ mod tests {
             Some(SYNTHETIC),
             "a GATT read without the report id parses too"
         );
+    }
+
+    #[test]
+    fn the_pens_other_report_answers_are_not_an_identity() {
+        // Reading every Report characteristic is only safe because the
+        // vendor check rejects the rest. The haptics capabilities
+        // feature opens with the non-zero auto-trigger control
+        // 0x000D0042, and the current-state feature is five bytes —
+        // shapes taken from the pen's live answers (findings/006 §2).
+        let mut capabilities = (0x000D_0042u32).to_le_bytes().to_vec();
+        capabilities.extend([0x03, 0x00, 0x04, 0x00]);
+        capabilities.resize(84, 0);
+        assert_eq!(parse_identity_report(&capabilities), None);
+        assert_eq!(parse_identity_report(&[0x00, 0xFF, 0x01, 0x00, 0x00]), None);
     }
 
     #[test]

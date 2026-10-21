@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The pen's own identity text, read from its standard GATT service.
+//! The pen's own facts, read over GATT — firmware text and transducer
+//! serial.
 //!
 //! Device Information (0x180A) is one of the few places the pen accepts
 //! a plain GATT read, and its Firmware Revision characteristic is what
@@ -15,14 +16,12 @@ use zbus::{Connection, OwnedVariant, Proxy};
 const BLUEZ: &str = "org.bluez";
 const OBJECT_MANAGER: &str = "org.freedesktop.DBus.ObjectManager";
 const GATT_CHARACTERISTIC1: &str = "org.bluez.GattCharacteristic1";
-const GATT_DESCRIPTOR1: &str = "org.bluez.GattDescriptor1";
 /// GATT: Device Information service, Firmware Revision String.
 const FIRMWARE_REVISION_UUID: &str = "00002a26-0000-1000-8000-00805f9b34fb";
-/// GATT: the Report Reference descriptor, whose two bytes name a HID
-/// report id and type.
-const REPORT_REFERENCE_UUID: &str = "00002908-0000-1000-8000-00805f9b34fb";
-/// Report Reference type byte for a feature report.
-const REPORT_TYPE_FEATURE: u8 = 0x02;
+/// GATT: a HID Report characteristic (HID service 0x1812). Every HID
+/// report of a Bluetooth-le HID device — input, output, feature — is
+/// one characteristic that answers a plain read.
+const REPORT_UUID: &str = "00002a4d-0000-1000-8000-00805f9b34fb";
 
 /// The pen's firmware revision, read over GATT: one plain `ReadValue`
 /// of the Firmware Revision characteristic BlueZ has discovered under
@@ -30,8 +29,10 @@ const REPORT_TYPE_FEATURE: u8 = 0x02;
 /// that has slept between scan and read, fails — the caller retries
 /// while the link is up.
 pub async fn firmware_revision(bluez: &Connection, device_path: &str) -> Result<String, String> {
-    let path = firmware_characteristic(bluez, device_path)
+    let path = characteristic_paths(bluez, device_path, FIRMWARE_REVISION_UUID)
         .await?
+        .into_iter()
+        .next()
         .ok_or_else(|| format!("{device_path}: no firmware revision characteristic"))?;
     let characteristic = Proxy::new(bluez, BLUEZ, path.as_str(), GATT_CHARACTERISTIC1)
         .await
@@ -44,12 +45,13 @@ pub async fn firmware_revision(bluez: &Connection, device_path: &str) -> Result<
     decode(&value).ok_or_else(|| format!("{path}: answered with no revision"))
 }
 
-/// Object path of the Firmware Revision characteristic under a device,
-/// as BlueZ exported it.
-async fn firmware_characteristic(
+/// Object paths of the characteristics with this UUID under a device,
+/// as BlueZ exported them.
+async fn characteristic_paths(
     bluez: &Connection,
     device_path: &str,
-) -> Result<Option<String>, String> {
+    uuid: &str,
+) -> Result<Vec<String>, String> {
     let root = Proxy::new(bluez, BLUEZ, "/", OBJECT_MANAGER)
         .await
         .map_err(|error| format!("BlueZ root object: {error}"))?;
@@ -61,16 +63,17 @@ async fn firmware_characteristic(
     Ok(objects
         .iter()
         .filter(|(path, _)| path.as_str().starts_with(&prefix))
-        .find(|(_, interfaces)| {
+        .filter(|(_, interfaces)| {
             interfaces.iter().any(|(name, properties)| {
                 name.as_str() == GATT_CHARACTERISTIC1
                     && properties
                         .get("UUID")
-                        .and_then(|uuid| uuid.downcast_ref::<&str>().ok())
-                        .is_some_and(|uuid| uuid.eq_ignore_ascii_case(FIRMWARE_REVISION_UUID))
+                        .and_then(|value| value.downcast_ref::<&str>().ok())
+                        .is_some_and(|found| found.eq_ignore_ascii_case(uuid))
             })
         })
-        .map(|(path, _)| path.as_str().to_string()))
+        .map(|(path, _)| path.as_str().to_string())
+        .collect())
 }
 
 /// The characteristic's bytes as text: the pen sends a plain ASCII
@@ -81,95 +84,38 @@ fn decode(bytes: &[u8]) -> Option<String> {
     (!text.is_empty()).then(|| text.to_string())
 }
 
-/// The pen's transducer serial, read over GATT: one plain `ReadValue`
-/// of the characteristic whose Report Reference descriptor names
-/// feature report `0x40` — the pen's own identity (findings/006 §2:
-/// serial and vendor, byte-for-byte what the digitizer's report 7
-/// streams). Reading a HID *feature* through BlueZ's HID profile has
-/// not been exercised on Linux yet; a pen that answers nothing fails
-/// and the caller retries while the link is up, so a silent pen simply
-/// keeps the identity-blind behaviour (identity.rs).
+/// The pen's transducer serial, read over GATT (findings/006 §2: serial
+/// and vendor, byte-for-byte what the digitizer's report 7 streams).
+///
+/// The pen exports no Report Reference descriptors, so nothing in the
+/// attribute tree names which characteristic answers feature report
+/// `0x40`. Instead the daemon reads every Report characteristic and
+/// keeps the one whose bytes match the identity layout — serial then
+/// the known vendor. The live check found exactly one such answer among
+/// the pen's reports, a ten-byte read; the others hold haptics state
+/// and keyboard/mouse padding that the vendor check rejects. A read
+/// that fails or answers with no identity simply moves on, so a pen
+/// that says nothing leaves the daemon in the identity-blind behaviour
+/// (identity.rs) and the caller retries while the link is up.
 pub async fn transducer_serial(bluez: &Connection, device_path: &str) -> Result<u32, String> {
-    let path = identity_characteristic(bluez, device_path)
-        .await?
-        .ok_or_else(|| format!("{device_path}: no identity feature characteristic"))?;
-    let characteristic = Proxy::new(bluez, BLUEZ, path.as_str(), GATT_CHARACTERISTIC1)
-        .await
-        .map_err(|error| format!("{path}: {error}"))?;
+    let paths = characteristic_paths(bluez, device_path, REPORT_UUID).await?;
     let options: HashMap<&str, OwnedVariant> = HashMap::new();
-    let value: Vec<u8> = characteristic
-        .call("ReadValue", &(options,))
-        .await
-        .map_err(|error| format!("cannot read {path}: {error}"))?;
-    crate::identity::parse_identity_report(&value)
-        .ok_or_else(|| format!("{path}: answered with no known identity"))
-}
-
-/// Object path of the characteristic under a device whose Report
-/// Reference descriptor reads `0x40, 0x02` — feature report `0x40`.
-/// BlueZ caches report references as descriptor properties; a BlueZ
-/// that exports no value gets one plain descriptor read instead.
-async fn identity_characteristic(
-    bluez: &Connection,
-    device_path: &str,
-) -> Result<Option<String>, String> {
-    let root = Proxy::new(bluez, BLUEZ, "/", OBJECT_MANAGER)
-        .await
-        .map_err(|error| format!("BlueZ root object: {error}"))?;
-    let objects: ManagedObjects = root
-        .call("GetManagedObjects", &())
-        .await
-        .map_err(|error| format!("cannot list Bluetooth objects: {error}"))?;
-    let prefix = format!("{device_path}/");
-    let references: Vec<(String, Option<Vec<u8>>, Option<String>)> = objects
-        .iter()
-        .filter(|(path, _)| path.as_str().starts_with(&prefix))
-        .filter_map(|(path, interfaces)| {
-            let descriptor = interfaces
-                .iter()
-                .find(|(name, _)| name.as_str() == GATT_DESCRIPTOR1)
-                .map(|(_, properties)| properties)?;
-            let uuid = descriptor
-                .get("UUID")
-                .and_then(|value| value.downcast_ref::<&str>().ok())?;
-            if !uuid.eq_ignore_ascii_case(REPORT_REFERENCE_UUID) {
-                return None;
-            }
-            let cached = descriptor
-                .get("ReportReference")
-                .or_else(|| descriptor.get("Value"))
-                .and_then(|value| Vec::<u8>::try_from(value.clone()).ok());
-            let characteristic = descriptor
-                .get("Characteristic")
-                .and_then(|value| value.downcast_ref::<&str>().ok())
-                .filter(|parent| parent.starts_with(&prefix))
-                .map(str::to_string);
-            Some((path.as_str().to_string(), cached, characteristic))
-        })
-        .collect();
-    for (descriptor_path, cached, characteristic) in references {
-        let bytes = match cached {
-            Some(bytes) => bytes,
-            None => {
-                let descriptor =
-                    Proxy::new(bluez, BLUEZ, descriptor_path.as_str(), GATT_DESCRIPTOR1)
-                        .await
-                        .map_err(|error| format!("{descriptor_path}: {error}"))?;
-                let options: HashMap<&str, OwnedVariant> = HashMap::new();
-                descriptor
-                    .call("ReadValue", &(options,))
-                    .await
-                    .map_err(|error| format!("cannot read {descriptor_path}: {error}"))?
-            }
+    for path in paths {
+        let Ok(characteristic) =
+            Proxy::new(bluez, BLUEZ, path.as_str(), GATT_CHARACTERISTIC1).await
+        else {
+            continue;
         };
-        if bytes.len() == 2
-            && bytes[0] == crate::identity::FEATURE_IDENTITY
-            && bytes[1] == REPORT_TYPE_FEATURE
-        {
-            return Ok(characteristic);
+        let answer: Result<Vec<u8>, _> =
+            characteristic.call("ReadValue", &(options.clone(),)).await;
+        let Ok(value) = answer else { continue };
+        if let Some(serial) = crate::identity::parse_identity_report(&value) {
+            return Ok(serial);
         }
     }
-    Ok(None)
+    Err(format!(
+        "{device_path}: no characteristic answered with an identity"
+    ))
 }
 
 #[cfg(test)]
