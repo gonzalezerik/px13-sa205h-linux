@@ -12,7 +12,8 @@
 //! The node lives and dies with the Bluetooth link, so this never holds
 //! a closed file: `resync` re-enumerates on the service loop's slower
 //! tick and `poll` drains the open nodes without blocking on the faster
-//! one. hidapi strips the report id, so `parse_report` sees the payload.
+//! one. Reads on Linux carry the report id as the first byte, so
+//! `parse_report` screens for the keyboard report before parsing.
 
 use std::collections::{HashMap, HashSet};
 
@@ -62,17 +63,21 @@ pub struct Event {
     pub gesture: Gesture,
 }
 
-/// One gesture report: boot-keyboard payload — modifiers, a reserved
-/// byte, key codes. A top-button press carries Left-GUI (0x08) and the
-/// gesture's key code; the release frame is all zeroes and yields
-/// nothing, and so does any other payload: the pen streams more
-/// collections over the same node.
-pub fn parse_report(payload: &[u8]) -> Option<Gesture> {
-    let modifiers = *payload.first()?;
-    if modifiers == 0 {
+/// The report id of the pen's boot-keyboard collection, the one the
+/// top button reports on (findings/006 §5).
+const KEYBOARD_REPORT: u8 = 0x43;
+
+/// One report as read from the node: the report id, then a
+/// boot-keyboard payload — modifiers, a reserved byte, key codes. A
+/// top-button press is the keyboard report carrying Left-GUI (0x08)
+/// and the gesture's key code; the release frame is all zeroes and
+/// yields nothing, and so does every other report id: the pen streams
+/// more collections over the same node.
+pub fn parse_report(report: &[u8]) -> Option<Gesture> {
+    if report.first() != Some(&KEYBOARD_REPORT) {
         return None;
     }
-    Gesture::from_keycode(*payload.get(2)?)
+    Gesture::from_keycode(*report.get(3)?)
 }
 
 /// A pen's HID node, open and non-blocking.
@@ -174,10 +179,11 @@ impl Watcher {
 mod tests {
     use super::*;
 
-    /// A press as hidapi delivers it: report id stripped, Left-GUI and
-    /// the gesture's key in the boot-keyboard payload.
+    /// A press as a Linux read delivers it: the keyboard report id,
+    /// Left-GUI and the gesture's key in the boot-keyboard payload.
+    /// (Captured from the pen's node, findings/006 §5.)
     fn press(key: u8) -> Vec<u8> {
-        vec![0x08, 0x00, key, 0, 0, 0, 0, 0]
+        vec![KEYBOARD_REPORT, 0x08, 0x00, key, 0, 0, 0, 0, 0]
     }
 
     #[test]
@@ -189,22 +195,27 @@ mod tests {
 
     #[test]
     fn a_release_is_not_a_gesture() {
-        assert_eq!(parse_report(&[0, 0, 0, 0, 0, 0, 0, 0]), None);
+        assert_eq!(
+            parse_report(&[KEYBOARD_REPORT, 0, 0, 0, 0, 0, 0, 0, 0]),
+            None
+        );
     }
 
     #[test]
-    fn other_keys_on_the_same_node_are_not_gestures() {
-        // A modifier-only frame and a different key read as nothing;
-        // the daemon must not invent events from the pen's other
-        // collections.
-        assert_eq!(parse_report(&[0x08, 0x00, 0, 0, 0, 0, 0, 0]), None);
+    fn other_reports_on_the_same_node_are_not_gestures() {
+        // The pen streams other collections over the same node: a
+        // gesture key under a different report id, a different key
+        // under this one, and a modifier-only keyboard frame all read
+        // as nothing.
+        assert_eq!(parse_report(&[0x41, 0x08, 0x00, 0x6f, 0, 0, 0, 0, 0]), None);
         assert_eq!(parse_report(&press(0x04)), None);
+        assert_eq!(parse_report(&press(0x00)), None);
     }
 
     #[test]
     fn short_frames_are_not_gestures() {
         assert_eq!(parse_report(&[]), None);
-        assert_eq!(parse_report(&[0x08, 0x00]), None);
+        assert_eq!(parse_report(&[KEYBOARD_REPORT, 0x08, 0x00]), None);
     }
 
     #[test]

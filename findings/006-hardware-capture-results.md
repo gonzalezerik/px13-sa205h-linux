@@ -140,8 +140,9 @@ handle `0x0021`**; `HidD_SetOutputReport` (ATT Write Request) is accepted by the
 - **Top ("shortcut") button**: BLE **keyboard input report `0x43`, notifications on handle
   `0x0019`**, one press+release pair per gesture — a double press is still a single pair — so the
   **pen itself classifies single/double/long** and Windows only sees distinct key reports.
-  **[VERIFIED-HW]** The payload, truncated in the HCI log, was identified later on Linux: it is a
-  boot-keyboard frame once hidapi strips the report id — modifiers, reserved, key code. A press
+  **[VERIFIED-HW]** The payload, truncated in the HCI log, was identified later on Linux: each
+  frame read from the node carries the report id as its first byte (Linux reads keep it), then a
+  boot-keyboard payload — modifiers, reserved, key code. A press
   is Left-GUI (`0x08`) with `F20` (`0x6f`) for a single press, `F19` (`0x6e`) for a double and
   `F18` (`0x6d`) for a long one; the release frame is all zeroes. Read straight off the pen's own
   hidraw node, which hands every reader its own copy even while the compositor holds the matching
