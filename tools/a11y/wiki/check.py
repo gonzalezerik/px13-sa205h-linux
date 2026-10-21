@@ -164,14 +164,14 @@ def main(site_dir: Path) -> int:
                         failures.append(
                             (
                                 scheme,
-                                path.name,
+                                rel,
                                 v["id"],
                                 f'{v["help"]}: {node["target"][0]} '
                                 f'{node.get("failureSummary", "")[:160]}',
                             )
                         )
                 for rule, detail in keyboard_issues(page) + zoom_issues(page):
-                    failures.append((scheme, path.name, rule, detail))
+                    failures.append((scheme, rel, rule, detail))
             ctx.close()
         browser.close()
     server.shutdown()

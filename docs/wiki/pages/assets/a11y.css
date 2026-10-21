@@ -12,6 +12,15 @@
   --md-footer-fg-color--lighter: #9b9b9b;
 }
 
+/* The theme paints body links a distinct blue but adds no underline, and
+   the blue measures 2.34:1 (light) / 1.92:1 (dark) against the surrounding
+   text — under the 3:1 needed to count as distinguishable by colour alone.
+   Underline content links; the heading permalinks are hidden until hover
+   and are excluded. */
+.md-typeset a:not(.headerlink) {
+  text-decoration: underline;
+}
+
 /* A link that only differs from its neighbouring text by a shade of grey is
    not distinguishable without colour. Underline the footer links. */
 .md-copyright a,

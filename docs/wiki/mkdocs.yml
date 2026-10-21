@@ -33,6 +33,24 @@ plugins:
   - search
 extra_css:
   - assets/a11y.css
+nav:
+  - Home: index.md
+  - Reference:
+    - Digitizer (screen link): reference/digitizer.md
+    - Bluetooth (pen link): reference/bluetooth.md
+  - Flows:
+    - Touch to pair: flows/pairing.md
+    - Haptics: flows/haptics.md
+    - Buttons: flows/buttons.md
+    - Battery and charger: flows/battery.md
+    - Wake and reconnect: flows/reconnect.md
+  - Windows map: windows-map.md
+  - Devices: devices.md
+  - Conventions: conventions.md
+  - Glossary: glossary.md
+  - Sources: sources.md
+  - Capturing the evidence: capturing.md
+  - Open questions: open-questions.md
 markdown_extensions:
   - tables
   - admonition
