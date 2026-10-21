@@ -13,7 +13,7 @@ use zbus::wire::{OwnedObjectPath, OwnedVariant};
 use zbus::{Connection, MatchRule, Message, MessageStream, Proxy};
 
 use crate::pen::{
-    BatteryDetail, Buttons, Capabilities, CapabilityHaptics, Haptics, Pen, Waveform,
+    BatteryDetail, ButtonActions, Buttons, Capabilities, CapabilityHaptics, Haptics, Pen, Waveform,
     address_from_object_path, battery_from_wire,
 };
 
@@ -22,6 +22,7 @@ const DAEMON_PATH: &str = "/io/github/gonzalezerik/Px13Pen/Daemon";
 const DAEMON_IFACE: &str = "io.github.gonzalezerik.Px13Pen.Daemon1";
 const PEN_IFACE: &str = "io.github.gonzalezerik.Px13Pen.Pen1";
 const HAPTICS_IFACE: &str = "io.github.gonzalezerik.Px13Pen.Haptics1";
+const BUTTONS_IFACE: &str = "io.github.gonzalezerik.Px13Pen.Buttons1";
 const PEN_ROOT: &str = "/io/github/gonzalezerik/Px13Pen/pen/";
 const PROPERTIES_IFACE: &str = "org.freedesktop.DBus.Properties";
 
@@ -43,6 +44,12 @@ pub enum WatchEvent {
     },
     Changed {
         pen: Pen,
+    },
+    /// A top-button gesture (`Pen1.ButtonEvent`); the gesture name is
+    /// one of the pen's `buttons.shortcut-gestures`.
+    Button {
+        path: String,
+        gesture: String,
     },
     Pairing {
         kind: String,
@@ -141,6 +148,30 @@ impl Client {
         self.set_haptics_property(path, "InkTexture", texture).await
     }
 
+    /// Write one gesture's command to `Buttons1`. `gesture` is one of
+    /// the names the `ButtonEvent` signal carries; the daemon rejects
+    /// nothing else — any command string is the user's.
+    pub async fn set_button_action(
+        &self,
+        path: &str,
+        gesture: &str,
+        command: &str,
+    ) -> Result<(), String> {
+        let name = match gesture {
+            "single" => "Single",
+            "double" => "Double",
+            "long" => "Long",
+            other => return Err(format!("unknown button gesture {other}")),
+        };
+        let buttons = Proxy::new(&self.connection, BUS_NAME, path, BUTTONS_IFACE)
+            .await
+            .map_err(|error| format!("{path}: {error}"))?;
+        buttons
+            .set_property(name, command)
+            .await
+            .map_err(|error| format!("setting {name}: {error}"))
+    }
+
     async fn set_haptics_property<T>(&self, path: &str, name: &str, value: T) -> Result<(), String>
     where
         T: serde::Serialize + zbus::zvariant::Type,
@@ -236,6 +267,7 @@ async fn read_pen(connection: &Connection, path: &str) -> Result<Pen, String> {
         battery: battery_from_wire(percent),
         battery_detail: BatteryDetail::from_wire(precise, millivolts, docked),
         haptics: read_haptics(connection, path).await,
+        buttons: read_buttons(connection, path).await,
         capabilities: pen
             .get_property::<BTreeMap<String, OwnedVariant>>("Capabilities")
             .await
@@ -273,6 +305,23 @@ async fn read_haptics(connection: &Connection, path: &str) -> Option<Haptics> {
     })
 }
 
+/// `Buttons1` exists only on pens with the shortcut button, and — like
+/// the haptics read — must never fail a pen read: any error means "no
+/// button actions to report".
+async fn read_buttons(connection: &Connection, path: &str) -> Option<ButtonActions> {
+    let buttons = Proxy::new(connection, BUS_NAME, path, BUTTONS_IFACE)
+        .await
+        .ok()?;
+    let single = buttons.get_property::<String>("Single").await.ok()?;
+    let double = buttons.get_property::<String>("Double").await.ok()?;
+    let long = buttons.get_property::<String>("Long").await.ok()?;
+    Some(ButtonActions {
+        single,
+        double,
+        long,
+    })
+}
+
 /// Turn one daemon signal into at most one event. `PenAdded` and
 /// `PropertiesChanged` re-read the whole pen rather than trusting the
 /// signal payload; `PenRemoved` and `PairingEvent` carry their own data.
@@ -290,6 +339,17 @@ async fn translate(connection: &Connection, message: &Message, all: bool) -> Opt
             Some(WatchEvent::Removed {
                 path: path.as_str().to_string(),
                 address: address_from_object_path(path.as_str()),
+            })
+        }
+        "ButtonEvent" => {
+            let path = header.path()?.as_str();
+            if !path.starts_with(PEN_ROOT) {
+                return None;
+            }
+            let gesture: String = message.body().deserialize().ok()?;
+            Some(WatchEvent::Button {
+                path: path.to_string(),
+                gesture,
             })
         }
         "PairingEvent" => {
@@ -446,6 +506,7 @@ mod tests {
             battery: None,
             battery_detail: None,
             haptics: None,
+            buttons: None,
             capabilities: None,
         };
         let pens = vec![sample(true), sample(false)];

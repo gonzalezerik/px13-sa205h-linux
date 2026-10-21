@@ -24,6 +24,10 @@ pub enum Event {
     PenRemoved { path: String, address: String },
     #[serde(rename = "pen.changed")]
     PenChanged { pen: Pen },
+    /// A top-button gesture (`Pen1.ButtonEvent`); the pen is present by
+    /// definition, so the path is enough to find it in the snapshot.
+    #[serde(rename = "pen.button")]
+    PenButton { path: String, gesture: String },
     #[serde(rename = "pairing")]
     Pairing { kind: String, detail: String },
 }
@@ -109,6 +113,7 @@ mod tests {
             battery,
             battery_detail: None,
             haptics: None,
+            buttons: None,
             capabilities: None,
         }
     }

@@ -80,11 +80,105 @@ pub fn is_ink_texture(name: &str) -> bool {
 /// `$XDG_CONFIG_HOME` (`$HOME/.config` fallback). `None` when neither
 /// is set — the daemon then keeps the policy in memory only.
 pub fn config_path() -> Option<PathBuf> {
+    config_dir().map(|dir| dir.join("haptics.conf"))
+}
+
+/// The shortcut button policy: one shell command per top-button
+/// gesture, `""` meaning do nothing. The pen's own Win+F18/19/20 press
+/// reaches the compositor either way (docs/dbus.md §7).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ButtonSettings {
+    pub single: String,
+    pub double: String,
+    pub long: String,
+}
+
+/// Where the button file lives: `px13pen/buttons.conf`, same directory
+/// rules as the haptics file.
+pub fn button_config_path() -> Option<PathBuf> {
+    config_dir().map(|dir| dir.join("buttons.conf"))
+}
+
+/// The directory both policy files share.
+fn config_dir() -> Option<PathBuf> {
     let root = match std::env::var_os("XDG_CONFIG_HOME") {
         Some(dir) if !dir.is_empty() => PathBuf::from(dir),
         _ => PathBuf::from(std::env::var_os("HOME")?).join(".config"),
     };
-    Some(root.join("px13pen").join("haptics.conf"))
+    Some(root.join("px13pen"))
+}
+
+/// Read the button policy; a missing file is "no actions", and
+/// anything unparseable falls back key by key, like the haptics file.
+pub fn load_buttons() -> ButtonSettings {
+    let Some(path) = button_config_path() else {
+        return ButtonSettings::default();
+    };
+    match fs::read_to_string(&path) {
+        Ok(text) => parse_buttons(&text),
+        Err(error) if path.exists() => {
+            eprintln!("settings: {}: {error} — using defaults", path.display());
+            ButtonSettings::default()
+        }
+        Err(_) => ButtonSettings::default(),
+    }
+}
+
+/// Write the button policy, temp file plus rename like the haptics one.
+pub fn save_buttons(settings: &ButtonSettings) -> Result<(), String> {
+    let Some(path) = button_config_path() else {
+        return Ok(());
+    };
+    let dir = path
+        .parent()
+        .ok_or_else(|| "config path has no parent".to_string())?;
+    fs::create_dir_all(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+    let tmp = path.with_extension("conf.tmp");
+    let result = (|| -> std::io::Result<()> {
+        let mut file = fs::File::create(&tmp)?;
+        file.write_all(buttons_to_text(settings).as_bytes())?;
+        file.flush()?;
+        fs::rename(&tmp, &path)
+    })();
+    result.map_err(|error| format!("{}: {error}", path.display()))
+}
+
+/// Serialise the button policy, one `key=value` per line. A command
+/// lives on one line, so the editor fields are single-line too.
+pub fn buttons_to_text(settings: &ButtonSettings) -> String {
+    format!(
+        "# px13pen shortcut button actions — written by px13pend; see docs/settings.md.\n\
+         # One shell command per gesture; empty means do nothing.\n\
+         # The pen's Win+F18/19/20 always reach the compositor too.\n\
+         single={}\n\
+         double={}\n\
+         long={}\n",
+        settings.single, settings.double, settings.long,
+    )
+}
+
+/// Parse the `key=value` lines; commands keep everything after the
+/// first `=`, so they may contain `=` themselves. Commands carrying a
+/// newline (impossible from the editor) are ignored.
+pub fn parse_buttons(text: &str) -> ButtonSettings {
+    let mut settings = ButtonSettings::default();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let value = value.trim();
+        match key.trim() {
+            "single" => settings.single = value.to_string(),
+            "double" => settings.double = value.to_string(),
+            "long" => settings.long = value.to_string(),
+            _ => {}
+        }
+    }
+    settings
 }
 
 /// Read the policy; a missing file is the defaults, and anything the
@@ -239,6 +333,23 @@ mod tests {
             !is_ink_texture("click"),
             "discrete waveforms are not textures"
         );
+    }
+
+    #[test]
+    fn the_button_file_round_trips() {
+        let settings = ButtonSettings {
+            single: "notify-send hi".to_string(),
+            double: "sh -c 'a=1; echo $a'".to_string(),
+            long: String::new(),
+        };
+        assert_eq!(parse_buttons(&buttons_to_text(&settings)), settings);
+    }
+
+    #[test]
+    fn unknown_button_keys_are_ignored() {
+        let settings = parse_buttons("single=ls\nmiddle=whatever\nnonsense\n");
+        assert_eq!(settings.single, "ls");
+        assert_eq!(settings.double, "");
     }
 
     #[test]

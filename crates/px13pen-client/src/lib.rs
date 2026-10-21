@@ -13,7 +13,7 @@ mod pen;
 
 pub use bus::{Client, WatchEvent};
 pub use pen::{
-    BatteryDetail, Buttons, Capabilities, CapabilityHaptics, Haptics, Pen, Waveform,
+    BatteryDetail, ButtonActions, Buttons, Capabilities, CapabilityHaptics, Haptics, Pen, Waveform,
     address_from_object_path, battery_from_wire,
 };
 pub use zbus::block_on;

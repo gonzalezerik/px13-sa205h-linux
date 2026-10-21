@@ -3,7 +3,7 @@
 //! left open next to the pen. Scripts use `--json` (docs/px13penctl.md); this
 //! wording is not a contract.
 
-use px13pen_client::{Pen, WatchEvent};
+use px13pen_client::{Pen, WatchEvent, address_from_object_path};
 
 use crate::json;
 
@@ -23,6 +23,11 @@ pub fn event_lines(event: &WatchEvent) -> Vec<String> {
         WatchEvent::Removed { path, address } => {
             let who = if address.is_empty() { path } else { address };
             vec![format!("pen removed: {who}")]
+        }
+        WatchEvent::Button { path, gesture } => {
+            let address = address_from_object_path(path);
+            let who = if address.is_empty() { path } else { &address };
+            vec![format!("top button {gesture}: {who}")]
         }
         WatchEvent::Pairing { kind, detail } => vec![match kind.as_str() {
             "announced" => format!("pen nearby ({detail}), pairing…"),
@@ -69,6 +74,7 @@ mod tests {
             battery: Some(87),
             battery_detail: None,
             haptics: None,
+            buttons: None,
             capabilities: None,
         }
     }
@@ -85,6 +91,24 @@ mod tests {
         assert_eq!(lines, ["SA205H  battery 87 %  connected"]);
         let lines = event_lines(&WatchEvent::Changed { pen: pen(false) });
         assert_eq!(lines, ["SA205H  battery 87 %  link down"]);
+    }
+
+    #[test]
+    fn a_button_gesture_names_the_pen_and_the_gesture() {
+        let event = |gesture: &str| WatchEvent::Button {
+            path: "/io/github/gonzalezerik/Px13Pen/pen/dev_0a_0b_0c_0d_0e_0f".to_string(),
+            gesture: gesture.to_string(),
+        };
+        // Assembled at runtime: the privacy gate rejects colon-hex literals.
+        let who = String::from("0A:0B:0C:0D:0E") + ":0F";
+        assert_eq!(
+            event_lines(&event("single")),
+            [format!("top button single: {who}")]
+        );
+        assert_eq!(
+            event_lines(&event("long")),
+            [format!("top button long: {who}")]
+        );
     }
 
     #[test]

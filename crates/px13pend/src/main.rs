@@ -26,6 +26,7 @@ mod penlog;
 mod presence;
 mod service;
 mod settings;
+mod shortcut;
 mod telemetry;
 
 use hidapi::{DeviceInfo, HidApi};

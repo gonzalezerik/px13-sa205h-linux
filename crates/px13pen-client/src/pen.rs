@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! What one pen looks like after it has been read off the bus: the
-//! `Pen1` properties, the `Haptics1` policy and the projected
-//! capability dict (docs/dbus.md), in the field names frontends
-//! publish (docs/px13penctl.md). Serialisation rules — which keys vanish
-//! when absent — are the contract, so they live with the types.
+//! `Pen1` properties, the `Haptics1` policy, the `Buttons1` actions and
+//! the projected capability dict (docs/dbus.md), in the field names
+//! frontends publish (docs/px13penctl.md). Serialisation rules — which
+//! keys vanish when absent — are the contract, so they live with the
+//! types.
 
 use serde::Serialize;
 
@@ -22,6 +23,10 @@ pub struct Pen {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub battery_detail: Option<BatteryDetail>,
     pub haptics: Option<Haptics>,
+    /// The shortcut-button actions (the daemon's `Buttons1`); absent
+    /// when the pen offers no such interface.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub buttons: Option<ButtonActions>,
     pub capabilities: Option<Capabilities>,
 }
 
@@ -67,6 +72,16 @@ pub struct Haptics {
     pub while_interacting: bool,
     /// Which continuous texture the tip arms.
     pub ink_texture: String,
+}
+
+/// The pen's `Buttons1` shortcut-button actions: one shell command per
+/// gesture, `""` meaning do nothing. Per user like the haptics policy —
+/// every pen reports the same values (docs/dbus.md §7).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct ButtonActions {
+    pub single: String,
+    pub double: String,
+    pub long: String,
 }
 
 /// The capability dict projected to typed fields. A key absent from the

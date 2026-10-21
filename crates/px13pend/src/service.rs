@@ -33,6 +33,7 @@ use px13pen_core::seamless;
 
 use crate::ink;
 use crate::settings::{self, HapticsSettings};
+use crate::shortcut::{self, Gesture};
 use crate::telemetry::Report;
 use zbus::fdo::{self, ManagedObjects};
 use zbus::object_server::{InterfaceRef, SignalEmitter};
@@ -142,6 +143,7 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         scan_until: Mutex::new(None),
         register_due: AtomicBool::new(false),
         haptics: Arc::new(Mutex::new(settings::load())),
+        buttons: Arc::new(Mutex::new(settings::load_buttons())),
         ink: Mutex::new(ink::Arming::default()),
     });
     state.register_host().await;
@@ -181,6 +183,11 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         .await
         .inspect_err(|error| eprintln!("pen log: {error}"))
         .ok();
+    // The shortcut button rides the pen's own HID node (shortcut.rs);
+    // a HID-less machine simply has no button events.
+    let mut shortcut = shortcut::Watcher::new()
+        .inspect_err(|error| eprintln!("shortcut button: {error}"))
+        .ok();
     let mut tick: u32 = 0;
     loop {
         futures_timer::Delay::new(TICK).await;
@@ -191,6 +198,13 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
             && let Err(error) = state.apply_reports(telemetry.drain()).await
         {
             eprintln!("pen log: {error}");
+        }
+        if let Some(watcher) = shortcut.as_mut() {
+            for event in watcher.poll() {
+                if let Err(error) = state.button_event(event).await {
+                    eprintln!("shortcut button: {error}");
+                }
+            }
         }
         state.expire_scan().await;
         if state.register_due.swap(false, Ordering::SeqCst) {
@@ -203,6 +217,9 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
             }
             if let Some(telemetry) = telemetry.as_mut() {
                 telemetry.sync(&state.connected_pens()).await;
+            }
+            if let Some(watcher) = shortcut.as_mut() {
+                watcher.resync();
             }
         }
     }
@@ -234,13 +251,14 @@ fn open_listener() -> Result<HidDevice, String> {
     Ok(device)
 }
 
-/// A pen about to be exported: object path, name, live values, and
-/// the shared policy its `Haptics1` interface reads.
+/// A pen about to be exported: object path, name, live values, and the
+/// shared policies its `Haptics1` and `Buttons1` interfaces read.
 type PendingInstall = (
     String,
     String,
     Arc<Mutex<PenValues>>,
     Arc<Mutex<HapticsSettings>>,
+    Arc<Mutex<settings::ButtonSettings>>,
 );
 
 /// Everything the interface objects share. The pen map, the pairing
@@ -267,6 +285,9 @@ struct State {
     /// The one haptics policy every pen shares, loaded from the user's
     /// config file at startup (docs/dbus.md §7).
     haptics: Arc<Mutex<HapticsSettings>>,
+    /// The one shortcut-button action set every pen shares, from the
+    /// user's config file (docs/dbus.md §7).
+    buttons: Arc<Mutex<settings::ButtonSettings>>,
     /// While-inking arming state, driven by the digitizer drain
     /// (crates/px13pend/src/ink.rs).
     ink: Mutex<ink::Arming>,
@@ -734,6 +755,7 @@ impl State {
                         observation.name.clone(),
                         Arc::clone(&data),
                         Arc::clone(&self.haptics),
+                        Arc::clone(&self.buttons),
                     ));
                     current.insert(
                         observation.bluez_path.clone(),
@@ -759,6 +781,11 @@ impl State {
                 .remove::<Haptics, _>(path_of(&px13pend_path)?)
                 .await
                 .ok();
+            self.connection
+                .object_server()
+                .remove::<Buttons1, _>(path_of(&px13pend_path)?)
+                .await
+                .ok();
             if announce {
                 let path = owned_path(&px13pend_path)?;
                 daemon
@@ -768,7 +795,7 @@ impl State {
             }
         }
 
-        for (px13pend_path, name, data, haptics) in installs {
+        for (px13pend_path, name, data, haptics, buttons) in installs {
             self.connection
                 .object_server()
                 .at(
@@ -787,12 +814,17 @@ impl State {
                 .at(
                     path_of(&px13pend_path)?,
                     Haptics {
-                        data,
+                        data: Arc::clone(&data),
                         settings: haptics,
                     },
                 )
                 .await
                 .map_err(|error| format!("cannot export haptics on {px13pend_path}: {error}"))?;
+            self.connection
+                .object_server()
+                .at(path_of(&px13pend_path)?, Buttons1 { settings: buttons })
+                .await
+                .map_err(|error| format!("cannot export buttons on {px13pend_path}: {error}"))?;
             if announce {
                 let path = owned_path(&px13pend_path)?;
                 daemon
@@ -902,6 +934,82 @@ impl State {
             self.emit_changes(&px13pend_path, &diff).await?;
         }
         Ok(())
+    }
+
+    /// A shortcut-button gesture from a pen's HID node (shortcut.rs):
+    /// announce `ButtonEvent` on the pen it belongs to, then run that
+    /// gesture's action if the user configured one.
+    async fn button_event(&self, event: shortcut::Event) -> Result<(), String> {
+        let gesture = event.gesture;
+        let Some(px13pend_path) = self.pen_path_for(&event) else {
+            return Ok(());
+        };
+        let path = path_of(&px13pend_path)?;
+        let Ok(iface) = self
+            .connection
+            .object_server()
+            .interface::<_, Pen>(path)
+            .await
+        else {
+            return Ok(());
+        };
+        iface
+            .button_event(gesture.name())
+            .await
+            .map_err(|error| format!("cannot emit ButtonEvent: {error}"))?;
+        self.run_action(gesture);
+        Ok(())
+    }
+
+    /// The pen a button read belongs to: the node's address when it has
+    /// one, and a lone connected pen otherwise — an address-less node
+    /// can only be attributed while exactly one pen holds a link.
+    fn pen_path_for(&self, event: &shortcut::Event) -> Option<String> {
+        let pens = locked(&self.pens);
+        if let Some(address) = &event.address
+            && let Some(entry) = pens.values().find(|entry| {
+                let data = locked(&entry.data);
+                data.present && data.address.eq_ignore_ascii_case(address)
+            })
+        {
+            return Some(entry.px13pend_path.clone());
+        }
+        let mut connected = pens.values().filter(|entry| locked(&entry.data).present);
+        let only = connected.next()?;
+        connected
+            .next()
+            .is_none()
+            .then(|| only.px13pend_path.clone())
+    }
+
+    /// Run the gesture's configured action: a shell command the user
+    /// stored (docs/dbus.md §7). Nothing else: the pen's own
+    /// Win+F18/19/20 press still reaches the compositor as always, and
+    /// a compositor-side binding is the user's choice, not this
+    /// daemon's.
+    fn run_action(&self, gesture: Gesture) {
+        let commands = locked(&self.buttons);
+        let command = match gesture {
+            Gesture::Single => &commands.single,
+            Gesture::Double => &commands.double,
+            Gesture::Long => &commands.long,
+        };
+        if command.is_empty() {
+            return;
+        }
+        // Detached from the daemon's terminal, and its exit status is
+        // nobody's business here; a failure to even spawn is worth a
+        // log line.
+        let spawn = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(command)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        if let Err(error) = spawn {
+            eprintln!("shortcut action: {error}");
+        }
     }
 
     /// BlueZ paths of the pens that hold a link right now.
@@ -1286,6 +1394,13 @@ impl Pen {
     fn capabilities(&self) -> BTreeMap<String, OwnedVariant> {
         locked(&self.data).capabilities.clone()
     }
+
+    /// The pen's top shortcut button fired a gesture the pen itself
+    /// classified: one of `buttons.shortcut-gestures` (`single`,
+    /// `double`, `long`). The pen's own Win+F18/19/20 press still
+    /// reaches the compositor independently (docs/dbus.md §5).
+    #[zbus(signal)]
+    async fn button_event(signal_emitter: &SignalEmitter<'_>, gesture: &str) -> zbus::Result<()>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1500,6 +1615,70 @@ impl Haptics {
         crate::haptics::send_to_pen(None, &effect.to_output_report())
             .map(|()| true)
             .map_err(|error| fdo::Error::Failed(format!("no-hid-node: {error}")))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// io.github.gonzalezerik.Px13Pen.Buttons1
+// ---------------------------------------------------------------------------
+
+/// The shortcut button interface, exported on every pen path: one
+/// shell command per gesture, `""` meaning do nothing. Shared by every
+/// pen (one user, one policy) and persisted to the user's config file
+/// (settings.rs). The pen's own Win+F18/19/20 press reaches the
+/// compositor regardless of what is configured here.
+pub struct Buttons1 {
+    settings: Arc<Mutex<settings::ButtonSettings>>,
+}
+
+#[zbus::interface(name = "io.github.gonzalezerik.Px13Pen.Buttons1")]
+impl Buttons1 {
+    /// The command run on a single press of the top button.
+    #[zbus(property)]
+    fn single(&self) -> String {
+        locked(&self.settings).single.clone()
+    }
+
+    #[zbus(property)]
+    fn set_single(&self, value: &str) -> fdo::Result<()> {
+        self.apply(|settings| settings.single = value.to_string())
+    }
+
+    /// The command run on a double press.
+    #[zbus(property)]
+    fn double(&self) -> String {
+        locked(&self.settings).double.clone()
+    }
+
+    #[zbus(property)]
+    fn set_double(&self, value: &str) -> fdo::Result<()> {
+        self.apply(|settings| settings.double = value.to_string())
+    }
+
+    /// The command run on a long press.
+    #[zbus(property)]
+    fn long(&self) -> String {
+        locked(&self.settings).long.clone()
+    }
+
+    #[zbus(property)]
+    fn set_long(&self, value: &str) -> fdo::Result<()> {
+        self.apply(|settings| settings.long = value.to_string())
+    }
+}
+
+impl Buttons1 {
+    /// Change one command and persist it, file first like the haptics
+    /// policy: a failed write leaves memory alone too.
+    fn apply(&self, change: impl FnOnce(&mut settings::ButtonSettings)) -> fdo::Result<()> {
+        let next = {
+            let mut current = locked(&self.settings).clone();
+            change(&mut current);
+            current
+        };
+        settings::save_buttons(&next).map_err(fdo::Error::Failed)?;
+        *locked(&self.settings) = next;
+        Ok(())
     }
 }
 

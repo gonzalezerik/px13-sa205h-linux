@@ -359,6 +359,9 @@ pub fn build(app: &adw::Application, system: bool) -> adw::ApplicationWindow {
                             }
                             toast(&toasts, &pairing_message(&kind, &detail), 5);
                         }
+                        // A gesture changes nothing this window shows:
+                        // its configured action runs in the daemon.
+                        WatchEvent::Button { .. } => {}
                     },
                     UiEvent::Failure(message) => toast(&toasts, &message, 5),
                     // Stay open, stay stale, say so — and keep the
@@ -608,6 +611,7 @@ mod tests {
             battery: None,
             battery_detail: None,
             haptics: None,
+            buttons: None,
             capabilities: None,
         }
     }

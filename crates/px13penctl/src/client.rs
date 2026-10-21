@@ -59,6 +59,10 @@ fn view(event: &WatchEvent) -> Event {
             address: address.clone(),
         },
         WatchEvent::Changed { pen } => Event::PenChanged { pen: pen.clone() },
+        WatchEvent::Button { path, gesture } => Event::PenButton {
+            path: path.clone(),
+            gesture: gesture.clone(),
+        },
         WatchEvent::Pairing { kind, detail } => Event::Pairing {
             kind: kind.clone(),
             detail: detail.clone(),
@@ -82,6 +86,7 @@ mod tests {
             battery: Some(50),
             battery_detail: None,
             haptics: None,
+            buttons: None,
             capabilities: None,
         }
     }
@@ -98,6 +103,10 @@ mod tests {
                 address: String::new(),
             },
             WatchEvent::Changed { pen: sample_pen() },
+            WatchEvent::Button {
+                path: "/io/github/gonzalezerik/Px13Pen/pen/dev_0a_0b_0c_0d_0e_0f".to_string(),
+                gesture: "single".to_string(),
+            },
             WatchEvent::Pairing {
                 kind: "searching".to_string(),
                 detail: String::new(),
@@ -108,6 +117,7 @@ mod tests {
             "pen.added",
             "pen.removed",
             "pen.changed",
+            "pen.button",
             "pairing",
         ];
         for (event, tag) in events.iter().zip(expected) {
