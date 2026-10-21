@@ -62,7 +62,20 @@ Once connected, HID over GATT **[public: Bluetooth HID over GATT profile]** carr
   **[ours: findings/006 §4, docs/protocol/haptics.md]**;
 - **battery**: notifications on handle `0x0015` (the percentages Windows showed came
   from here) **[ours]**;
-- pen **identity and capabilities**: feature reports `0x40`/`0x42` **[ours]**.
+- **battery, in detail**: the pen's firmware log — a vendor service that hosts only ever
+  read — streams its fuel gauge (a percentage to a hundredth, millivolts) and its charge
+  state, which is also how a host learns the pen fell asleep on its charger
+  **[ours: findings/010]**;
+- **firmware revision**: the standard Device Information service (0x180A, characteristic
+  `0x2A26`) answers the version string with one plain read **[public: Bluetooth SIG
+  assigned numbers]**;
+- pen **identity and capabilities**: feature reports `0x40`/`0x42` **[ours]**. On Linux
+  the identity has a transport quirk: the pen exports no Report Reference descriptors at
+  all, so a HID feature get has nothing to map onto and is rejected; the identity report
+  answers instead as a plain readable HID Report (0x2A4D) characteristic — ten bytes,
+  serial then vendor — and that number is byte-identical to the digitizer's reports 7 and
+  34, which makes it the one number both links agree on **[ours: findings/006 §2,
+  docs/decisions.md]**.
 
 The barrel button is *not* one of the extras: it is on the screen link, in report 7,
 visible only while the pen is in range; a gesture battery across three presses showed
@@ -141,7 +154,7 @@ Usage Tables (Digitizer Page `0x0D`); Bluetooth HID over GATT profile; Bluetooth
 Specification, Security Manager (legacy pairing methods); BlueZ `doc/mgmt-protocol.rst`
 (Add Remote Out Of Band Data). Ours (this repo):
 findings/008 (touch-to-pair on Linux), findings/006 (pairing clock chain, `0x6E`/report-34 semantics, buttons, battery,
-haptics on the wire), findings/005/007, `docs/protocol/digitizer-tlc.md` (report
+haptics on the wire), findings/010 (dock, charger and fuel-gauge readings from the pen's debug log), findings/005/007, `docs/protocol/digitizer-tlc.md` (report
 descriptor layout), `docs/protocol/seamless-pairing.md`, `docs/protocol/haptics.md`.
 Session identifiers ("session 08 run 2") refer to the instrumented sessions
 inventoried at the top of findings/006.
