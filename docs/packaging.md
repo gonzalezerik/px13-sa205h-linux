@@ -101,8 +101,16 @@ The flake's module is the zero-config path there:
 It puts the package in the system profile and registers the same files the tarball ships:
 `services.udev.packages`, `services.dbus.packages` (activation + policy), `systemd.packages`
 (units) with `px13pend` and `px13pen-tray` wanted by `graphical-session.target`, and the
-polkit action via the standard data dirs. The overlay
-(`overlays.default`) exposes `pkgs.px13-sa205h-linux` for systems that want it in the package
+polkit action via the standard data dirs.
+
+A rule takes effect only when an event runs it, and a switch sends none — the built-in
+digitizer's node existed long before the rule did. So the module also installs a oneshot
+`px13-sa205h-linux-udev-trigger.service`, which runs
+`udevadm trigger --subsystem-match=hidraw --action=change` and re-runs on every switch where
+the assembled `/etc/udev/rules.d` changes. Enabling the module grants access to a device that
+is already there: no replug, and no hand-typed `udevadm trigger`.
+
+The overlay (`overlays.default`) exposes `pkgs.px13-sa205h-linux` for systems that want it in the package
 set directly; `nixosModules.px13-sa205h-linux` is the same module for those systems.
 
 ## Distribution packages
