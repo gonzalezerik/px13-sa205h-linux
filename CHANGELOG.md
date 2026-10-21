@@ -6,6 +6,63 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **Enabling the NixOS module now reaches the devices that are already there.** A rule
+  takes effect only when an event runs it, and a system switch sends none, so the
+  built-in digitizer's node waited out every switch without its uaccess ACL until a
+  replug or a hand-typed `udevadm trigger`. The module installs a oneshot unit that
+  re-runs the trigger over present `hidraw` devices whenever the assembled rules change
+  (docs/packaging.md).
+- **A pen is identified by its transducer serial, not its Bluetooth address.** The
+  digitizer names the serial of the pen in its range in input reports 7 and 34, and the
+  pen answers its identity report with the same number (findings/006 §2–3), so that is
+  what `px13pend` matches on: an announcement carrying the serial of a pen this host
+  already paired pairs nothing, asleep or awake. A dual-boot pen waving the identity
+  another system bonded no longer drives the daemon into pairing the pen it already has
+  (docs/decisions.md). The identity comes from a plain GATT read of the pen's Report
+  characteristic: the pen exports no Report Reference descriptors, so a HID feature get
+  has nothing to map onto.
+- **An opt-in hover-out tick.** `Haptics1.HoverTick` (a settings row, default off) plays
+  one `hover` tick as the pen lifts out of the digitizer's range after hovering. Windows
+  buzzes a few frames after hover strokes end, but only the frames were seen — the
+  causing event is inferred (findings/007 §4) — so the behaviour earns a switch, not a
+  default.
+- **Status notes.** The pen says what it is doing: `Idle · 84 %` when the link drops off
+  the desk, `Docked · Charging 84 %` when it falls asleep on its charger and a plain
+  `84 %` when it is picked up again — one note per change, decided before it is sent,
+  each arriving in place of the last (crates/px13pend/src/status.rs).
+  `Notifications1.Enabled` silences them (`px13pen/status.conf`, a settings row).
+- **Tray icon (`px13pen-tray`).** A StatusNotifierItem with a dbusmenu — KDE, Xfce,
+  Cinnamon, MATE, LXQt and the trays of Waybar, swaybar, ironbar and friends: battery
+  and link state, haptics on/off with Low/Medium/High presets, Pair a pen…, Settings….
+  The icon means "a pen is live right now" and goes away a minute after the last link
+  drops, so the pen's idle drop of 6–15 s never blinks it. Labels in words, battery by
+  icon shape — the accessibility gate landed before the tray (docs/tray.md).
+- **The pen's firmware revision, read.** `Pen1.FirmwareRevision` takes the version
+  string from the standard Device Information service (0x180A, characteristic 0x2A26)
+  with one plain GATT read while the pen is connected; the earlier guess of a Bluetooth
+  HID GET is superseded. Shown in the settings card and `px13penctl status`.
+- **The top button's gestures are events, and each can run a command.** The pen
+  classifies its own single, double and long presses; `px13pend` reads the gesture off a
+  copy of the pen's reports — hidraw delivers to every reader, so the compositor's
+  exclusive grab stays untouched — emits `Pen1.ButtonEvent`, and runs one user-stored
+  shell command per gesture (`Buttons1`, `px13pen/buttons.conf`); the settings window
+  edits them. The plan of re-emitting gestures as keys through uinput is gone: the pen's
+  own Win+F18/19/20 already reach the compositor, and only the gesture behind a press
+  was ever invisible (docs/decisions.md, findings/006 §5).
+- **The charger, the fuel gauge and the dock, read from the pen's debug log.** The pen
+  streams its firmware log over a vendor Bluetooth service that `px13pend` only ever
+  reads. From it come `Pen1.BatteryPercentPrecise` and `BatteryMillivolts`, and
+  `Pen1.Docked` — true after a dock sleep (a charge-state line, a gauge sample showing
+  the battery no longer discharging, sleep right behind it; the line alone also precedes
+  an off-charger sleep), false on the next connect. `px13pend pen-log` shows the decoded
+  log on its own (findings/010).
+- **Haptics policy: kept, gated, and armed by the pen itself.** The haptics settings
+  (`px13pen/haptics.conf`) survive restarts; playback is gated per waveform class —
+  `WhileInking` for continuous textures, `WhileInteracting` for ticks. The daemon arms
+  the chosen continuous ink texture from the pen's own tip and eraser contact reports,
+  one write per tool activation (the eraser end always arms the eraser texture), and
+  stops it with the none ordinal the pen actually honours (findings/009,
+  docs/protocol/haptics.md).
 - **Seamless pairing works end to end.** Touching the pen to the screen pairs it in under a
   second through `px13pend`, with no button, code or configuration: the same single step and
   about the same time as on Windows (findings/008 §10). A pen that wakes up advertising for a
