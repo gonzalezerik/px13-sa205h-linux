@@ -27,7 +27,7 @@ Legend: ✅ supported today · ⚠️ partial/gap · ❌ absent · 🔍 measure 
 | 5d | Haptics on/off | host-side policy [DOC; V-HW: per-user registry key `EnhancedPenSupport`, three DWORDs + intensity QWORD double →006 §4; toggles send no preview buzz] | ✅ settings toggle → `Haptics1.Enabled`; off, the daemon starts no new writes (it still cuts a texture it had armed) [V-HW →006 §4] | switch in `px13pen-settings` → `Haptics1.Enabled` | yes |
 | 5e | Repeat / retrigger / cutoff | Repeat Count 0x24, Retrigger Period 0x25 ms, Waveform Cutoff 0x28 ms [DOC →001 §2; V-HW: all carried in output 0x41 (cutoff in 10 ms units, retrigger 16-bit LE); capability durations 45–1995 ms, current state feature 0x41 →006 §4] | ⚠️ `PlayEffect`/`PlayOrdinal` carry repeat/cutoff/retrigger per call (docs/dbus.md §7) | RE-derived per-effect defaults remain open | yes |
 | 6 | Tail button over BT: single/double/hold | BT HID keyboard TLC: WIN+F20 / WIN+F19 / WIN+F18 [DOC →001 §2; V-HW: BLE keyboard report 0x43 notifications on handle 0x0019, one press+release pair per gesture; **the pen itself classifies** single/double/long (a double press is still one pair); key codes truncated in the trace →006 §5] | ⚠️ BlueZ exposes as keyboard; kernel hid-input maps F18-F20 keys but no double/hold semantics [HYP] | map the distinct reports → configurable actions via D-Bus [→006 §5: no combo decode needed; hold buzz is pen-local, no host write]; `px13pend watch-buttons` dumps the pen's raw evdev events to identify the codes on Linux first [HYP until run] | yes |
-| 6b | Stowage dock/undock events | WIN+CTRL+F20 dock / F19 undock over BT [DOC →001 §2] | ❌ (keys only) | px13pend surfaces dock/undock signals | no |
+| 6b | Stowage dock/undock events | WIN+CTRL+F20 dock / F19 undock over BT [DOC →001 §2; V-HW: the keys were never seen on this pen — its Bluetooth HID reports carried zero bytes across three dockings and two lifts →010 §4] | ⚠️ px13pend detects the dock from the pen's firmware log: `Pen1.Docked` true after the dock sleep, false on the next connect [V-HW →010 §3] | undock is implicit in the `Docked` clear; the key codes themselves have no observed counterpart on this pen | no |
 | 7 | Settings: button remap, pressure curve, haptic strength, handedness, ASUS extras | "Pen & Windows Ink" + MyASUS/ProArt Creator Hub [DOC; keys → findings/003] | ❌ no equivalent | px13pend config + GTK4 settings app (WCAG 2.2 AA) | no |
 | 8 | Pen info: firmware version, model (read-only) | ASUS apps read it [DOC; V-HW: firmware "2.0.37", HID VID 0x330A/PID 0x0001, identity via BLE feature 0x40 →006 §1–2] | ❌ | px13pend reads via BT HID GET (safe reads only) [HYP source after 3c] | yes |
 | 9a | Wake-on-Touch (digitizer) | ELAN WoT DCH driver [DOC, URL fixtures] | 🔍 hid-multitouch may already wake device; unverified [HYP] | WoT analysis + observe on hardware | no |
@@ -40,7 +40,7 @@ Legend: ✅ supported today · ⚠️ partial/gap · ❌ absent · 🔍 measure 
 1. **Seamless pairing** (row 4) — nothing on Linux; RE-first.
 2. **Pen haptics host** (5a–5e) — kernel core exists but no pen binding; userspace px13pend owns it.
 3. **Identity correlation** (2) — digitizer↔BT-pen matching + per-pen settings.
-4. **BT button semantics** (6, 6b) — combo decoding + remapping.
+4. **BT button semantics** (6) — top-button gesture events + remapping.
 5. **Azimuth end-to-end** (1a) — kernel + libinput upstream work.
 6. **Settings app** (7) — Windows-parity UI, accessible.
 
