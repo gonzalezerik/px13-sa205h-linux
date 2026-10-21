@@ -44,6 +44,27 @@
           # generated rule in lib/udev/rules.d.
           services.udev.packages = [ pkgs.px13-sa205h-linux ];
 
+          # A rule only takes effect when an event runs it, and a
+          # switch sends none: the digitizer's hidraw node is there
+          # long before this rule is installed, so the first install
+          # would leave it without its uaccess ACL until a replug or
+          # a hand-typed `udevadm trigger`. Re-run the rule over the
+          # devices already present whenever the assembled rules
+          # change; RemainAfterExit keeps the finished run "active",
+          # which is what makes the restart trigger fire.
+          systemd.services."px13-sa205h-linux-udev-trigger" = {
+            description = "Apply the pen uaccess rules to present HID devices";
+            after = [ "systemd-udev-trigger.service" ];
+            wantedBy = [ "multi-user.target" ];
+            restartTriggers = [ config.environment.etc."udev/rules.d".source ];
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              ExecStart =
+                "${config.systemd.package}/bin/udevadm trigger --subsystem-match=hidraw --action=change";
+            };
+          };
+
           # D-Bus activation: the pairing helper on the system bus and
           # px13pend on each session bus. Both start on demand.
           services.dbus.packages = [ pkgs.px13-sa205h-linux ];
