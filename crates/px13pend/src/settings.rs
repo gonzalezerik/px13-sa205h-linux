@@ -25,18 +25,26 @@ pub struct HapticsSettings {
     pub while_inking: bool,
     /// Discrete effects (the UI ticks) get through.
     pub while_interacting: bool,
+    /// The one opt-in: a hover tick when the pen lifts out of the
+    /// digitizer's range. Windows is seen to buzz there (findings/007
+    /// §4), but only the frame correlation is solid and the causing
+    /// event is inferred, so the tick waits for the user to ask.
+    pub hover_tick: bool,
     /// Which continuous texture the tip arms; `is_ink_texture` names.
     pub ink_texture: String,
 }
 
 impl Default for HapticsSettings {
-    /// The Windows defaults: everything on, full strength, plain ink.
+    /// The Windows defaults — everything on, full strength, plain
+    /// ink — with one exception: `hover_tick` is off until asked for,
+    /// because the behaviour behind it is inferred, not proven.
     fn default() -> Self {
         HapticsSettings {
             enabled: true,
             intensity: 100,
             while_inking: true,
             while_interacting: true,
+            hover_tick: false,
             ink_texture: "ink".to_string(),
         }
     }
@@ -309,11 +317,13 @@ pub fn to_text(settings: &HapticsSettings) -> String {
          intensity={}\n\
          while_inking={}\n\
          while_interacting={}\n\
+         hover_tick={}\n\
          ink_texture={}\n",
         settings.enabled,
         settings.intensity,
         settings.while_inking,
         settings.while_interacting,
+        settings.hover_tick,
         settings.ink_texture,
     )
 }
@@ -346,6 +356,7 @@ pub fn parse(text: &str) -> HapticsSettings {
             "while_interacting" => {
                 settings.while_interacting = parse_bool(value).unwrap_or(settings.while_interacting)
             }
+            "hover_tick" => settings.hover_tick = parse_bool(value).unwrap_or(settings.hover_tick),
             "ink_texture" => {
                 let name = value.to_lowercase();
                 if is_ink_texture(&name) {
@@ -373,12 +384,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_match_the_windows_defaults() {
+    fn defaults_match_the_windows_defaults_apart_from_the_hover_tick() {
         let settings = HapticsSettings::default();
         assert!(settings.enabled);
         assert_eq!(settings.intensity, 100);
         assert!(settings.while_inking);
         assert!(settings.while_interacting);
+        assert!(
+            !settings.hover_tick,
+            "an inferred behaviour starts switched off"
+        );
         assert_eq!(settings.ink_texture, "ink");
     }
 
@@ -389,6 +404,7 @@ mod tests {
             intensity: 42,
             while_inking: true,
             while_interacting: false,
+            hover_tick: true,
             ink_texture: "brush".to_string(),
         };
         assert_eq!(parse(&to_text(&settings)), settings);

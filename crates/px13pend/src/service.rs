@@ -149,6 +149,7 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         haptics: Arc::new(Mutex::new(settings::load())),
         buttons: Arc::new(Mutex::new(settings::load_buttons())),
         ink: Mutex::new(ink::Arming::default()),
+        hover: Mutex::new(ink::HoverOut::default()),
         status: Arc::new(Mutex::new(settings::load_status())),
         tracker: Mutex::new(status::Tracker::default()),
         status_note_id: AtomicU32::new(0),
@@ -308,6 +309,9 @@ struct State {
     /// While-inking arming state, driven by the digitizer drain
     /// (crates/px13pend/src/ink.rs).
     ink: Mutex<ink::Arming>,
+    /// The digitizer's report 7 fed through the hover-out edge, for
+    /// the opt-in hover tick (docs/haptics.md).
+    hover: Mutex<ink::HoverOut>,
     /// The status notification switch every pen shares, from the user's
     /// config file (docs/settings.md).
     status: Arc<Mutex<settings::StatusSettings>>,
@@ -536,6 +540,9 @@ impl State {
                 let ok = self.write_ink(&action);
                 locked(&self.ink).on_done(&action, ok);
             }
+            if locked(&self.hover).on_frame(&frame) {
+                self.hover_tick();
+            }
             if pen_in_range(&frame) {
                 self.arm_scan().await;
                 continue;
@@ -578,6 +585,25 @@ impl State {
             ink::Action::Nothing => return false,
         };
         crate::haptics::send_to_pen(None, &effect.to_output_report()).is_ok()
+    }
+
+    /// The opt-in hover tick (findings/007 §4): the pen lifted out of
+    /// the digitizer's range after hovering. One disposable write —
+    /// a late tick would be worse than none, so nothing retries a
+    /// failure, and a pen without a link simply misses the tick.
+    fn hover_tick(&self) {
+        let settings = locked(&self.haptics);
+        let Some(ordinal) = resolve("hover") else {
+            return;
+        };
+        if !settings.hover_tick || !settings.plays(ordinal) {
+            return;
+        }
+        let effect = Effect {
+            intensity: intensity_byte(settings.intensity),
+            ..Effect::of(ordinal)
+        };
+        crate::haptics::send_to_pen(None, &effect.to_output_report()).ok();
     }
 
     /// Start (or extend) the LE scan while a pen is in range and none is
@@ -1709,6 +1735,20 @@ impl Haptics {
     #[zbus(property)]
     fn set_while_interacting(&self, value: bool) -> fdo::Result<()> {
         self.apply(|settings| settings.while_interacting = value)
+    }
+
+    /// The opt-in hover tick: one buzz when the pen lifts out of the
+    /// digitizer's range after hovering. Off by default — Windows is
+    /// only *seen* to do this at hover-stroke ends (findings/007 §4),
+    /// and additionally needs `WhileInteracting` on to get through.
+    #[zbus(property)]
+    fn hover_tick(&self) -> bool {
+        locked(&self.settings).hover_tick
+    }
+
+    #[zbus(property)]
+    fn set_hover_tick(&self, value: bool) -> fdo::Result<()> {
+        self.apply(|settings| settings.hover_tick = value)
     }
 
     /// Which continuous texture the tip arms. One of the names the

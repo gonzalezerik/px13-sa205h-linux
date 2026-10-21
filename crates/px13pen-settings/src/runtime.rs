@@ -27,6 +27,10 @@ pub enum Command {
         path: String,
         on: bool,
     },
+    SetHoverTick {
+        path: String,
+        on: bool,
+    },
     SetInkTexture {
         path: String,
         texture: String,
@@ -137,6 +141,7 @@ async fn pump(client: &Client, commands: &Receiver<Command>, events: &Sender<UiE
             Command::SetWhileInteracting { path, on } => {
                 client.set_while_interacting(&path, on).await
             }
+            Command::SetHoverTick { path, on } => client.set_hover_tick(&path, on).await,
             Command::SetInkTexture { path, texture } => {
                 client.set_ink_texture(&path, &texture).await
             }

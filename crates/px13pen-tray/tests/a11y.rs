@@ -38,6 +38,7 @@ fn sample(
             intensity,
             while_inking: true,
             while_interacting: true,
+            hover_tick: false,
             ink_texture: "ink".to_string(),
         }),
         buttons: None,

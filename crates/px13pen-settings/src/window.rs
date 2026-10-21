@@ -39,6 +39,7 @@ struct PenCard {
     intensity: Option<gtk::Scale>,
     while_inking: Option<adw::SwitchRow>,
     while_interacting: Option<adw::SwitchRow>,
+    hover_tick: Option<adw::SwitchRow>,
     ink_texture: Option<adw::ComboRow>,
     /// The daemon's status-notification switch; every pen carries the
     /// same one, so every card shows it, haptics or not.
@@ -142,6 +143,19 @@ impl PenCard {
                 on,
                 &wire,
                 |path, on| Command::SetWhileInteracting { path, on },
+            );
+            group.add(&row);
+            row
+        });
+
+        let hover_tick = haptics.as_ref().map(|haptics| {
+            let row = toggle_row(
+                "Hover-out tick",
+                Some("One tick as the pen lifts out of the screen's range — seen on Windows, off until you ask"),
+                haptics.hover_tick,
+                on,
+                &wire,
+                |path, on| Command::SetHoverTick { path, on },
             );
             group.add(&row);
             row
@@ -253,6 +267,7 @@ impl PenCard {
             intensity,
             while_inking,
             while_interacting,
+            hover_tick,
             ink_texture,
             status_switch,
             textures,
@@ -286,6 +301,10 @@ impl PenCard {
         }
         if let Some(row) = &self.while_interacting {
             row.set_active(haptics.as_ref().is_some_and(|h| h.while_interacting));
+            row.set_sensitive(on);
+        }
+        if let Some(row) = &self.hover_tick {
+            row.set_active(haptics.as_ref().is_some_and(|h| h.hover_tick));
             row.set_sensitive(on);
         }
         if let Some(row) = &self.ink_texture {

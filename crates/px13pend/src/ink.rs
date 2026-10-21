@@ -129,6 +129,32 @@ impl Arming {
     }
 }
 
+/// Hover-out edge detector, for the opt-in hover tick. The ticks seen
+/// at Windows' hover-stroke ends (findings/007 §4) land as the pen
+/// leaves range — two back-to-back strokes with the pen staying in
+/// range produced none — so this answers true on the one report 7
+/// frame that takes the pen from in range to out. It starts cold: a
+/// daemon that boots while a pen hovers has not seen a stroke and
+/// never ticks on the first leave.
+#[derive(Default)]
+pub struct HoverOut {
+    in_range: bool,
+}
+
+impl HoverOut {
+    /// Feed one digitizer frame; true exactly on the frame that ends
+    /// the hover, false on every other.
+    pub fn on_frame(&mut self, frame: &[u8]) -> bool {
+        if frame.is_empty() || frame[0] != 0x07 {
+            return false;
+        }
+        let in_range = frame.len() >= 2 && frame[1] & IN_RANGE != 0;
+        let left = self.in_range && !in_range;
+        self.in_range = in_range;
+        left
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,6 +348,51 @@ mod tests {
             arming.on_frame(&[0x6e, 0x01, 0x02], sa205h),
             Action::Nothing,
             "pairing announcements are not pen reports"
+        );
+    }
+
+    #[test]
+    fn hover_out_fires_once_when_the_pen_leaves_range() {
+        let mut hover = HoverOut::default();
+        assert!(
+            !hover.on_frame(&frame(HOVER)),
+            "entering range is not leaving it"
+        );
+        assert!(
+            hover.on_frame(&frame(0x00)),
+            "the stroke ends as the pen lifts out"
+        );
+        assert!(
+            !hover.on_frame(&frame(0x00)),
+            "one tick per stroke, not one per frame"
+        );
+        assert!(
+            !hover.on_frame(&frame(TIP)),
+            "contact is not a hover-out either"
+        );
+        assert!(hover.on_frame(&frame(0x00)));
+    }
+
+    #[test]
+    fn a_pen_already_hovering_at_start_gets_no_tick() {
+        // Cold start: the daemon never saw the stroke, so the first
+        // leave must be silent.
+        let mut hover = HoverOut::default();
+        assert!(!hover.on_frame(&frame(0x00)));
+        assert!(!hover.on_frame(&frame(0x00)));
+    }
+
+    #[test]
+    fn hover_out_ignores_other_reports_and_keeps_its_edge() {
+        let mut hover = HoverOut::default();
+        hover.on_frame(&frame(HOVER));
+        assert!(
+            !hover.on_frame(&[0x6e, 0x01, 0x02]),
+            "other reports are invisible to it"
+        );
+        assert!(
+            hover.on_frame(&frame(0x00)),
+            "the edge survives frames of other reports"
         );
     }
 }

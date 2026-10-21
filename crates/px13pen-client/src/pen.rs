@@ -86,6 +86,9 @@ pub struct Haptics {
     pub while_inking: bool,
     /// Discrete effects (the UI ticks) get through.
     pub while_interacting: bool,
+    /// The opt-in tick for lifting the pen out of the digitizer's
+    /// range; off until the user asks for it (docs/haptics.md).
+    pub hover_tick: bool,
     /// Which continuous texture the tip arms.
     pub ink_texture: String,
 }

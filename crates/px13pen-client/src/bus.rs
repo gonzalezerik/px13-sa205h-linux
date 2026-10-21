@@ -143,6 +143,12 @@ impl Client {
             .await
     }
 
+    /// Write `Haptics1.HoverTick`: the opt-in tick for lifting the
+    /// pen out of the digitizer's range after hovering.
+    pub async fn set_hover_tick(&self, path: &str, on: bool) -> Result<(), String> {
+        self.set_haptics_property(path, "HoverTick", on).await
+    }
+
     /// Write `Haptics1.InkTexture`; the daemon rejects names it does
     /// not know and says which ones it does.
     pub async fn set_ink_texture(&self, path: &str, texture: &str) -> Result<(), String> {
@@ -317,12 +323,20 @@ async fn read_haptics(connection: &Connection, path: &str) -> Option<Haptics> {
         .get_property::<bool>("WhileInteracting")
         .await
         .ok()?;
+    // A daemon without the property predates the opt-in; a pen that
+    // does have haptics should not lose them over it, so a missing
+    // HoverTick reads as its shipped default: off.
+    let hover_tick = haptics
+        .get_property::<bool>("HoverTick")
+        .await
+        .unwrap_or(false);
     let ink_texture = haptics.get_property::<String>("InkTexture").await.ok()?;
     Some(Haptics {
         enabled,
         intensity,
         while_inking,
         while_interacting,
+        hover_tick,
         ink_texture,
     })
 }
