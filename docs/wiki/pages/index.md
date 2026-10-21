@@ -31,6 +31,13 @@ much to trust any given claim.
 what, and [open questions](open-questions.md) lists what nobody has proven
 yet.
 
+**"I have a different pen-capable laptop."** — everything here was measured
+on one machine and one pen; the
+[other-hardware guide](other-hardware.md) walks you through read-only
+checks that tell you what your pair actually exposes, whether a daemon
+like this could ever speak to it, and how to report your hardware (or
+take the work on yourself) if it can.
+
 ## What this wiki is not
 
 It is documentation for one laptop and one pen, reverse-engineered by one

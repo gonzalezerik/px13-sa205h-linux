@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **The wiki grew its content pages** — reference pages for the digitizer and the pen's
+  Bluetooth side (every layout confidence-labelled), five flow pages with sequence
+  listings, the Windows host-stack map, capture recipes, device identity, conventions,
+  glossary, sources and a kept-list of open questions; plus `docs/wiki/layouts.json`,
+  the same layouts as machine-readable data, and `tools/wiki/dissect.py` to decode a
+  frame against it.
+- **The repository stopped implying support it has never tested**: the README's
+  "planned" protocol table (MPP 2.0, USI) is gone, replaced by an explicit one-laptop-
+  one-pen scope statement and a disclaimer (no warranty; read-only exploration for
+  anyone chasing their own hardware).
+- **A path for other hardware**: the wiki's new *Your laptop / pen* guide (read-only
+  checks, decide, build-or-report), `tools/capture/sanitize.py` (identifier randomiser
+  with hard refusals — raw captures, binaries and base64 never pass through, originals
+  are never overwritten), and a Hardware report issue template.
+
 - **Enabling the NixOS module now reaches the devices that are already there.** A rule
   takes effect only when an event runs it, and a system switch sends none, so the
   built-in digitizer's node waited out every switch without its uaccess ACL until a

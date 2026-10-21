@@ -6,20 +6,26 @@ This project covers the active-pen features the kernel doesn't: tap-to-pair over
 Bluetooth, haptic feedback, pen battery, Bluetooth buttons and settings stored in the
 pen.
 
-It doesn't replace the protocol a pen speaks to the screen (MPP, USI, AES). That lives in
-the pen's and the digitizer's firmware, and inking (position, pressure, tilt, eraser,
-barrel button) already works on Linux through `hid-multitouch` and `wacom`. This project
-is the layer above it: one D-Bus interface that describes any pen by its capabilities, with
-a backend per pen protocol underneath. Desktops and apps talk to that interface and never
-need to know which protocol the pen speaks.
+**One laptop, one pen.** Every claim in this repository was measured on the ASUS ProArt
+PX13 (HN7306) with the ASUS Pen 3.0 (SA205H) — ELAN `04F3:4631` digitizer, MPP 2.6 over
+the air. Nothing else is supported, and nothing else is "planned": other laptops (Surface,
+HP, Lenovo, other ASUS models), other pens, MPP 2.0/1.x, USI — nobody here has tested any
+of them, so this repository says nothing about whether they work. The D-Bus API is
+capability-shaped, but there is exactly one implementation of it, verified against exactly
+this hardware pair.
 
-| Pen protocol | Status |
-|---|---|
-| **MPP 2.6** (Microsoft Pen Protocol, haptic pens) | in progress, tested on the ASUS Pen 3.0 (SA205H) with the ASUS ProArt PX13 (HN7306) and its ELAN `04F3:4631` digitizer |
-| MPP 2.0 / 1.x | planned |
-| USI 1.0 / 2.0 | planned |
+If you have a different pen-capable machine, the wiki's
+[other-hardware guide](docs/wiki/pages/other-hardware.md) is the honest path: a few
+read-only checks that tell you what you actually have, what a daemon like this would need
+from it, and (if you want the maintainer to look at it) exactly what to attach to an
+issue — sanitized, because raw captures carry pairing keys and serials.
 
-A protocol is listed as supported only once it has been tested on real hardware.
+What the kernel already does for pens in general stays the kernel's business: the air
+protocol between pen and digitizer (MPP, USI, AES) is firmware, and inking — position,
+pressure, tilt, eraser, barrel button — usually works on Linux out of the box through
+`hid-multitouch` or `wacom`. This project covers only the extras for this specific
+pen/laptop pair that the kernel does not do: tap-to-pair over Bluetooth, haptic feedback,
+pen battery, Bluetooth buttons and settings stored in the pen.
 
 > **Status: touch-to-pair works.** Bring the pen to the screen and `px13pend` pairs it in
 > under a second: no pairing button, no code to confirm, nothing to configure. That matches
@@ -187,6 +193,21 @@ tools/fetch-artifacts.sh          # everything in docs/artifacts.tsv → artifac
 ```
 
 Never flash or update firmware on a pen or a digitizer. See CONTRIBUTING.md §6.
+
+## Disclaimer
+
+This is a hobby reverse-engineering project, not vendor software, and it talks to
+embedded controllers. It is written to stay inside the lines — only the commands published
+specifications and the vendor's own software already send, nothing ever written to firmware
+channels, and the vendor's private report collections left untouched — but a bug in any
+program at this level can still make a device misbehave until it restarts, and no test
+proves the absence of the next one. So: **use it at your own risk; there is no warranty
+of any kind** (AGPL §16 says it formally; this says it plainly). You are responsible for
+your own hardware. That especially applies if you follow the
+[other-hardware guide](docs/wiki/pages/other-hardware.md) to chase support for a pen or
+digitizer of your own: keep exploration read-only, never poke vendor collections or
+firmware because a wiki (this one included) said a byte "is probably" something, and stop
+the moment something behaves oddly.
 
 ## License
 

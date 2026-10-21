@@ -1,0 +1,93 @@
+name: Hardware report
+description: Tell the project about a pen-capable laptop/pen pair it has not tested (sanitized information only)
+title: "[hw] "
+labels:
+  - hardware-report
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This project has exactly one test machine (see the README); reports like
+        this are how anything else ever becomes known.
+
+        **Sanitize before you post.** Run `tools/capture/sanitize.py` on every file
+        or block you paste — it replaces Bluetooth addresses, keys and any value you
+        name with `--serial` by freshly random data and prints what it did. Never
+        attach raw captures (`.hidrec`, `.pcap`, btmon logs): they carry pairing
+        keys even when the visible text looks harmless. The maintainer will ask you
+        to delete anything that slipped through.
+  - type: dropdown
+    id: inking
+    attributes:
+      label: Does inking already work on Linux (kernel alone, evtest or the pen-test page)?
+      options:
+        - "Yes — position, pressure, tilt"
+        - "Some of it (explained below)"
+        - "No pen events at all"
+        - Not checked yet
+    validations:
+      required: true
+  - type: textarea
+    id: identity
+    attributes:
+      label: Machine and digitizer (guide step B)
+      description: system product name + BIOS from dmidecode, and the i2c modalias lines
+      render: text
+      placeholder: |
+        $ sudo dmidecode -s system-product-name
+        $ sudo dmidecode -s bios-version
+        $ cat /sys/bus/hid/devices/*/modalias | grep -i i2c
+    validations:
+      required: true
+  - type: textarea
+    id: descriptor
+    attributes:
+      label: Digitizer descriptor findings (guide step C)
+      description: >
+        The decoded report descriptor, or at least: is there a Usage Page 0xFFF4
+        collection (with reports 56/6E/6F/70)? Anything from usage page 0x0E on
+        the pen side? Paste sanitized text.
+      render: text
+  - type: textarea
+    id: gatt
+    attributes:
+      label: Pen GATT / Bluetooth HID dump (03-manual-pair.sh)
+      description: sanitized output of the manual-pair dump (GATT tree + descriptor)
+      render: text
+  - type: textarea
+    id: frames
+    attributes:
+      label: Sample frames (hex)
+      description: one or two example reports — announcement, battery, button — sanitized
+      render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Sanitizing
+      options:
+        - label: >
+            I ran tools/capture/sanitize.py on everything pasted or attached, and
+            I can show or describe its report if asked.
+          required: true
+        - label: No raw capture files are attached (.hidrec, .pcap, btmon logs).
+          required: true
+        - label: >
+            I re-read the final text myself for serials, addresses or keys the
+            tool might not recognize (decimal serials printed as words, device
+            names, …).
+          required: true
+  - type: dropdown
+    id: goal
+    attributes:
+      label: What are you hoping for?
+      options:
+        - Just documenting my hardware family
+        - Maintainer adds support (I can test builds)
+        - I am implementing support myself (FYI / questions)
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      placeholder: Windows behaviour you observed, odd events, what broke…
