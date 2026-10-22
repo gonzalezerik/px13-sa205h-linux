@@ -9,10 +9,13 @@
 //! back inside the window was only picked up again. One note per drop,
 //! never an Idle that a late report then contradicts.
 //!
-//! A pen coming back says its battery and nothing else, after waiting
-//! briefly for a fresh reading rather than repeating the stale value
-//! from before the sleep. A pen that was never read stays quiet: a
-//! note with no number in it is not a sentence.
+//! A pen coming back says its battery and nothing else, the moment the
+//! link is up, with the newest value it has; if a fresh reading lands
+//! within a few seconds and differs, the same note is updated in place
+//! (the daemon replaces it by id). A pen back before its drop was even
+//! named was only shifted in the hand and says nothing. A pen that was
+//! never read stays quiet until its first reading: a note with no
+//! number in it is not a sentence.
 //!
 //! Pure logic on an injected clock: the service loop feeds it pen
 //! changes and its own `now` every tick, the tests feed synthetic
@@ -27,8 +30,8 @@ use std::time::{Duration, Instant};
 /// belongs to this drop.
 pub const DROP_WINDOW: Duration = Duration::from_secs(3);
 
-/// The wait for a fresh reading after a reconnect; after it the last
-/// known value speaks, and a pen nobody ever read says nothing.
+/// How long after a reconnect a fresh reading still corrects the wake
+/// note; after it, readings are routine and say nothing.
 pub const WAKE_WINDOW: Duration = Duration::from_secs(3);
 
 /// The note chosen for one pen. The daemon words these and titles them
@@ -64,9 +67,11 @@ enum Phase {
     /// The Idle or Docked note was sent; quiet until the pen returns.
     Idle,
     Docked,
-    /// Linked again, waiting for a fresh reading.
+    /// Linked again; a fresh reading inside the window may still
+    /// correct the wake note. `said` is the percent already shown.
     Waking {
         at: Instant,
+        said: Option<u8>,
     },
 }
 
@@ -134,10 +139,9 @@ impl Tracker {
         }
     }
 
-    /// The link is back. A pen that dropped — seconds or days ago — now
-    /// waits out `WAKE_WINDOW` for a fresh reading; a drop that had not
-    /// been named yet is cancelled, so a short flap never sends Idle
-    /// and Awake for the same set-down.
+    /// The link is back. A pen whose drop was named (Idle or Docked)
+    /// says its battery at once; a drop not yet named is cancelled
+    /// silently, so a short flap sends neither Idle nor Awake.
     pub fn link_up(&mut self, path: &str, percent: Option<u8>, now: Instant) -> Option<Note> {
         let entry = self.pens.get_mut(path)?;
         if let Some(percent) = percent {
@@ -148,22 +152,28 @@ impl Tracker {
         entry.charger = false;
         match entry.phase {
             Phase::Linked | Phase::Waking { .. } => None,
-            Phase::Dropping { .. } | Phase::Idle | Phase::Docked => {
-                entry.phase = Phase::Waking { at: now };
+            Phase::Dropping { .. } => {
+                entry.phase = Phase::Linked;
                 None
+            }
+            Phase::Idle | Phase::Docked => {
+                let said = entry.percent;
+                entry.phase = Phase::Waking { at: now, said };
+                said.map(|percent| Note::Awake { percent })
             }
         }
     }
 
-    /// A fresh battery reading. The one that ends a wake wait is the
-    /// wake note itself.
+    /// A fresh battery reading. Inside the wake window it corrects the
+    /// wake note when the number changed — or is the wake note, for a
+    /// pen that had no number to say yet.
     pub fn battery(&mut self, path: &str, percent: Option<u8>) -> Option<Note> {
         let entry = self.pens.get_mut(path)?;
         if let Some(percent) = percent {
             entry.percent = Some(percent);
         }
         match entry.phase {
-            Phase::Waking { .. } => {
+            Phase::Waking { said, .. } if entry.percent.is_some() && entry.percent != said => {
                 entry.phase = Phase::Linked;
                 entry.percent.map(|percent| Note::Awake { percent })
             }
@@ -172,28 +182,22 @@ impl Tracker {
     }
 
     /// The service loop's heartbeat: every pending decision whose
-    /// window has closed resolves — a drop becomes Idle, a wake speaks
-    /// the newest value it has, or, if it never had one, stays quiet.
+    /// window has closed resolves — a drop becomes Idle (said only with
+    /// a number), and a wake window simply closes.
     pub fn tick(&mut self, now: Instant) -> Vec<(String, Note)> {
         let mut due = Vec::new();
         for (path, entry) in &mut self.pens {
-            let (at, waking) = match entry.phase {
-                Phase::Dropping { at } => (at, false),
-                Phase::Waking { at } => (at, true),
-                _ => continue,
-            };
-            let window = if waking { WAKE_WINDOW } else { DROP_WINDOW };
-            if now < at + window {
-                continue;
-            }
-            entry.phase = if waking { Phase::Linked } else { Phase::Idle };
-            let note = match (waking, entry.percent) {
-                (true, Some(percent)) => Some(Note::Awake { percent }),
-                (false, Some(percent)) => Some(Note::Idle { percent }),
-                _ => None,
-            };
-            if let Some(note) = note {
-                due.push((path.clone(), note));
+            match entry.phase {
+                Phase::Dropping { at } if now >= at + DROP_WINDOW => {
+                    entry.phase = Phase::Idle;
+                    if let Some(percent) = entry.percent {
+                        due.push((path.clone(), Note::Idle { percent }));
+                    }
+                }
+                Phase::Waking { at, .. } if now >= at + WAKE_WINDOW => {
+                    entry.phase = Phase::Linked;
+                }
+                _ => {}
             }
         }
         due
@@ -258,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn waking_waits_for_the_fresh_reading_then_says_only_the_battery() {
+    fn waking_says_the_battery_at_once_and_corrects_it_in_place() {
         let t0 = base();
         let mut tracker = tracker(true);
         tracker.link_down("/p", Some(84), t0);
@@ -269,32 +273,43 @@ mod tests {
         let back = t0 + Duration::from_secs(60);
         assert_eq!(
             tracker.link_up("/p", Some(84), back),
-            None,
-            "the stale value is not said twice"
+            Some(Note::Awake { percent: 84 }),
+            "no waiting: the newest value speaks the moment the link is up"
         );
         assert_eq!(
             tracker.battery("/p", Some(83)),
-            Some(Note::Awake { percent: 83 })
+            Some(Note::Awake { percent: 83 }),
+            "a fresh reading that differs corrects the note"
         );
+        assert_eq!(tracker.battery("/p", Some(82)), None, "only once");
     }
 
     #[test]
-    fn a_wake_with_no_new_reading_falls_back_after_the_window() {
+    fn a_fresh_reading_with_the_same_number_says_nothing_more() {
         let t0 = base();
         let mut tracker = tracker(true);
         tracker.link_down("/p", Some(84), t0);
         tracker.tick(t0 + DROP_WINDOW);
         let back = t0 + Duration::from_secs(30);
         tracker.link_up("/p", Some(84), back);
-        assert!(tracker.tick(back + Duration::from_millis(2900)).is_empty());
-        assert_eq!(
-            tracker.tick(back + WAKE_WINDOW),
-            vec![("/p".to_string(), Note::Awake { percent: 84 })]
-        );
+        assert_eq!(tracker.battery("/p", Some(84)), None);
+        assert!(tracker.tick(back + WAKE_WINDOW).is_empty());
     }
 
     #[test]
-    fn a_flap_quick_enough_never_becomes_idle() {
+    fn a_reading_after_the_wake_window_is_routine() {
+        let t0 = base();
+        let mut tracker = tracker(true);
+        tracker.link_down("/p", Some(84), t0);
+        tracker.tick(t0 + DROP_WINDOW);
+        let back = t0 + Duration::from_secs(30);
+        tracker.link_up("/p", Some(84), back);
+        assert!(tracker.tick(back + WAKE_WINDOW).is_empty());
+        assert_eq!(tracker.battery("/p", Some(80)), None);
+    }
+
+    #[test]
+    fn a_flap_quick_enough_says_nothing_at_all() {
         let t0 = base();
         let mut tracker = tracker(true);
         tracker.link_down("/p", Some(84), t0);
@@ -304,12 +319,9 @@ mod tests {
         );
         assert!(
             tracker.tick(t0 + DROP_WINDOW).is_empty(),
-            "the pending Idle is gone, and the wake still waits"
+            "the pending Idle is gone"
         );
-        assert_eq!(
-            tracker.tick(t0 + Duration::from_millis(3500)),
-            vec![("/p".to_string(), Note::Awake { percent: 84 })]
-        );
+        assert_eq!(tracker.battery("/p", Some(83)), None);
     }
 
     #[test]
@@ -330,10 +342,7 @@ mod tests {
                 .into_iter()
                 .map(|(_, note)| note),
         );
-        assert_eq!(
-            notes,
-            vec![Note::Awake { percent: 84 }, Note::Idle { percent: 84 }]
-        );
+        assert_eq!(notes, vec![Note::Idle { percent: 84 }]);
     }
 
     #[test]
@@ -345,7 +354,10 @@ mod tests {
             tracker.tick(t0 + DROP_WINDOW).is_empty(),
             "an Idle without a number is not a sentence"
         );
-        tracker.link_up("/p", None, t0 + Duration::from_secs(10));
+        assert_eq!(
+            tracker.link_up("/p", None, t0 + Duration::from_secs(10)),
+            None
+        );
         assert!(tracker.tick(t0 + Duration::from_secs(30)).is_empty());
     }
 
@@ -361,7 +373,11 @@ mod tests {
     fn a_known_absent_pen_announces_its_first_wake() {
         let t0 = base();
         let mut tracker = tracker(false);
-        assert_eq!(tracker.link_up("/p", Some(80), t0), None);
+        assert_eq!(
+            tracker.link_up("/p", None, t0),
+            None,
+            "nothing to say before the first reading"
+        );
         assert_eq!(
             tracker.battery("/p", Some(80)),
             Some(Note::Awake { percent: 80 })

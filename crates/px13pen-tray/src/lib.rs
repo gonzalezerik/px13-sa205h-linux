@@ -151,11 +151,20 @@ impl PenTray {
     }
 
     fn open_settings(&self) {
-        // The same detachment a button action has: launched, then
-        // its status is its own. The session's PATH carries the
-        // package binary.
-        if let Err(error) = std::process::Command::new("px13pen-settings").spawn() {
-            eprintln!("px13pen-tray: opening settings: {error}");
+        // The same detachment a button action has: launched, then its
+        // status is its own. The settings window installs beside the
+        // tray, so that copy is found whatever PATH the service got;
+        // PATH is only the fallback for a split install.
+        let beside = std::env::current_exe()
+            .ok()
+            .and_then(|tray| tray.parent().map(|dir| dir.join("px13pen-settings")))
+            .filter(|path| path.is_file());
+        let program = beside.unwrap_or_else(|| "px13pen-settings".into());
+        if let Err(error) = std::process::Command::new(&program).spawn() {
+            eprintln!(
+                "px13pen-tray: opening settings ({}): {error}",
+                program.display()
+            );
         }
     }
 }

@@ -208,7 +208,9 @@ charger report (the tray sends none of its own).
   pen back inside the window was only picked up: one flap, at most one
   note. (`crates/px13pend/src/status.rs` is that decision machine, on
   an injected clock.)
-- **A wake-up waits briefly for a fresh reading** — gauge or
+- **A wake-up waits briefly for a fresh reading** (superseded
+  2026-10-22, below: the note now shows at once and is corrected in
+  place) — gauge or
   `Battery1` — rather than repeating the stale number from before the
   sleep, then falls back to the newest value it has. A pen nobody ever
   read says nothing: a note with no number in it is not a sentence.
@@ -296,3 +298,12 @@ catch-all device match) still see the devices and must exclude the pen themselve
 (vendor `330a`, product `0001`); docs/packaging.md says how. This limits the damage of
 the gap; closing it still needs LE legacy out-of-band pairing in the kernel
 (docs/future/kernel-le-legacy-oob.md).
+
+## 2026-10-22: the wake note shows at once
+
+Waiting up to three seconds for a fresh battery reading made the pickup note arrive late
+enough to feel broken. It now shows the newest known percent the moment the link is up;
+a fresh reading inside the next three seconds that differs updates the same note in place
+(it already replaces by id), so the stale-number concern is handled without the wait. A
+pick-up before the drop was named (no Idle or Docked shown yet) sends nothing, since there
+is nothing to take back. A pen never read still says nothing until its first reading.

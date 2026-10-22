@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **The pickup notification shows up right away**: it used to wait up to
+  three seconds for a fresh battery reading. It now shows the last known
+  percentage the moment the pen reconnects, and updates the same
+  notification in place if a fresh reading differs. Setting the pen down and
+  picking it straight back up (before "Idle" was shown) no longer sends a
+  note at all.
+- **The tray's Settings… entry opens the settings window again**: it now
+  starts the copy installed beside the tray instead of searching PATH,
+  which the service may not have.
 - **Shortcut-button commands find your apps on NixOS**: the module pulled
   the units in with `wantedBy`, which also gave `px13pend` NixOS's minimal
   PATH, so a command like `rnote` was never found. The units are now wanted
