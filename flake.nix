@@ -87,9 +87,15 @@
           # the session pair: px13pend.service, which starts with every
           # graphical session so the touch-to-pair listener is up before the
           # pen comes near, and px13pen-tray.service showing its icon.
+          # Pulled in from the target rather than through
+          # systemd.user.services.<name>.wantedBy: that option also writes
+          # an override with NixOS's minimal PATH, and the shortcut-button
+          # commands px13pend runs need the session's PATH.
           systemd.packages = [ pkgs.px13-sa205h-linux ];
-          systemd.user.services.px13pend.wantedBy = [ "graphical-session.target" ];
-          systemd.user.services.px13pen-tray.wantedBy = [ "graphical-session.target" ];
+          systemd.user.targets.graphical-session.wants = [
+            "px13pend.service"
+            "px13pen-tray.service"
+          ];
         };
       };
 

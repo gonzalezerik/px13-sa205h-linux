@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **Shortcut-button commands find your apps on NixOS**: the module pulled
+  the units in with `wantedBy`, which also gave `px13pend` NixOS's minimal
+  PATH, so a command like `rnote` was never found. The units are now wanted
+  through the target and keep the session's PATH. A command that fails now
+  leaves its error and exit status in the journal instead of vanishing.
 - **Only one daemon per session**: D-Bus activation now goes through
   `px13pend.service`, and a second daemon exits instead of taking over the
   bus name. Two daemons used to answer the same touch, fail each other's

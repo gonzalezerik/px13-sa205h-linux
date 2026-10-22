@@ -1316,18 +1316,28 @@ impl State {
         if command.is_empty() {
             return;
         }
-        // Detached from the daemon's terminal, and its exit status is
-        // nobody's business here; a failure to even spawn is worth a
-        // log line.
+        // Detached: the command's exit status goes nowhere but the
+        // journal, together with what it printed on stderr, so a
+        // command that cannot run ("rnote: not found") is visible there.
         let spawn = std::process::Command::new("/bin/sh")
             .arg("-c")
             .arg(command)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::process::Stdio::inherit())
             .spawn();
-        if let Err(error) = spawn {
-            eprintln!("shortcut action: {error}");
+        match spawn {
+            Ok(mut child) => {
+                let command = command.clone();
+                std::thread::spawn(move || match child.wait() {
+                    Ok(status) if !status.success() => {
+                        eprintln!("shortcut action `{command}` exited with {status}");
+                    }
+                    Ok(_) => {}
+                    Err(error) => eprintln!("shortcut action `{command}`: {error}"),
+                });
+            }
+            Err(error) => eprintln!("shortcut action `{command}`: {error}"),
         }
     }
 
