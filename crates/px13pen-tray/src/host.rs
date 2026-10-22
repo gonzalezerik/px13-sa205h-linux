@@ -7,8 +7,10 @@
 //! what `PenTray` says; this file only translates.
 //!
 //! Change signals are the item's own `NewTitle`/`NewIcon`/
-//! `NewToolTip`/`NewStatus` and the menu's `LayoutUpdated`: hosts read
-//! the values back on those, not on PropertiesChanged.
+//! `NewToolTip`/`NewStatus` and, for the menu, both `LayoutUpdated` and
+//! `ItemsPropertiesUpdated` carrying every item: hosts differ in which
+//! one makes them refresh a menu that is open, and an open menu must
+//! follow the pen (docked, lifted, battery) without being reopened.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -68,6 +70,15 @@ async fn announce(connection: &Connection, revision: u32, status: &str) -> zbus:
     item.new_tool_tip().await?;
     item.new_status(status).await?;
     let menu = server.interface::<_, Menu>(MENU_PATH).await?;
+    let updated: Vec<(i32, Properties)> = menu
+        .get()
+        .await
+        .nodes()
+        .into_iter()
+        .enumerate()
+        .map(|(id, node)| (id as i32, node.properties))
+        .collect();
+    menu.items_properties_updated(updated, Vec::new()).await?;
     menu.layout_updated(revision, 0).await
 }
 
@@ -573,6 +584,13 @@ impl Menu {
     fn about_to_show_group(&self, _ids: Vec<i32>) -> (Vec<i32>, Vec<i32>) {
         (Vec::new(), Vec::new())
     }
+
+    #[zbus(signal)]
+    async fn items_properties_updated(
+        signal_emitter: &SignalEmitter<'_>,
+        updated_props: Vec<(i32, Properties)>,
+        removed_props: Vec<(i32, Vec<String>)>,
+    ) -> zbus::Result<()>;
 
     #[zbus(signal)]
     async fn layout_updated(

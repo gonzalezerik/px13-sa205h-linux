@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **An open tray menu follows the pen**: the menu now announces changes with
+  both `LayoutUpdated` and `ItemsPropertiesUpdated`, so hosts that refresh
+  an open menu on either one show "Docked", battery and the haptics switch
+  as they change instead of after reopening it.
 - **The pickup notification shows up right away**: it used to wait up to
   three seconds for a fresh battery reading. It now shows the last known
   percentage the moment the pen reconnects, and updates the same
