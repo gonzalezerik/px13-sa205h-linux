@@ -5,7 +5,7 @@
 # fetching:  makepkg --skipfetch after cloning, or simply
 #   cargo build --release --locked --workspace && sudo cargo xtask install
 pkgname=px13-sa205h-linux
-pkgver=0.0.1
+pkgver=0.1.0
 pkgrel=1
 pkgdesc='Linux support for the ASUS Pen 3.0 (SA205H) on the ASUS ProArt PX13: touch-to-pair, haptics, battery, top button'
 arch=(x86_64 aarch64)

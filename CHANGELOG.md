@@ -4,7 +4,9 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.1.0 — 2026-10-22
+
+First release.
 
 - **Turn the status notes off from the tray**: the menu has a *Status
   notifications* check item, the same switch as the settings window's.

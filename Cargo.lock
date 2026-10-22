@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "px13pen-client"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "futures-util",
  "serde",
@@ -744,11 +744,11 @@ dependencies = [
 
 [[package]]
 name = "px13pen-core"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "px13pen-pair-helper"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "libc",
  "zbus",
@@ -756,7 +756,7 @@ dependencies = [
 
 [[package]]
 name = "px13pen-settings"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "async-channel",
  "futures-util",
@@ -767,7 +767,7 @@ dependencies = [
 
 [[package]]
 name = "px13pen-tray"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "futures-util",
  "px13pen-client",
@@ -777,7 +777,7 @@ dependencies = [
 
 [[package]]
 name = "px13penctl"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "px13pen-client",
  "serde",
@@ -786,7 +786,7 @@ dependencies = [
 
 [[package]]
 name = "px13pend"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "futures-timer",
  "futures-util",
