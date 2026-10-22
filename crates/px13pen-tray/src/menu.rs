@@ -66,6 +66,7 @@ pub struct RadioItem {
 pub enum Action {
     SetHaptics { path: String, enabled: bool },
     SetIntensity { path: String, intensity: u8 },
+    SetStatusNotifications { path: String, enabled: bool },
     Pair,
     Settings,
 }
@@ -85,6 +86,18 @@ pub(super) fn build(tray: &PenTray) -> Vec<MenuItem> {
     // driven by the first pen that has them.
     if let Some(pen) = tray.pens.iter().find(|pen| pen.haptics.is_some()) {
         items.extend(haptics_controls(pen));
+    }
+    // The idle / docked / picked-up notes, the same switch as the
+    // settings window's; one user policy, read from the first pen.
+    if let Some(pen) = tray.pens.first() {
+        items.push(MenuItem::Checkmark(CheckmarkItem {
+            label: "Status notifications".to_string(),
+            checked: pen.status_notifications,
+            action: Action::SetStatusNotifications {
+                path: pen.path.clone(),
+                enabled: !pen.status_notifications,
+            },
+        }));
     }
     items.push(MenuItem::Separator);
     items.push(command("Pair a pen…", Action::Pair));

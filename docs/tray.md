@@ -39,6 +39,9 @@ it to their hidden drawer instead of painting a dead icon.
   value. The block appears only for a pen whose daemon exports
   `Haptics1`: a pen that cannot buzz grows no switch that would do
   nothing.
+- **Status notifications** — a check item for `Notifications1.Enabled`,
+  the same switch as the settings window's: unchecked, the daemon stops
+  the idle, docked and picked-up notes.
 - **Pair a pen…** — asks `px13pend` to start touch-to-pair. The
   daemon's own notifications report how pairing went (docs/dbus.md);
   the tray adds none of its own, so a pairing never double-notifies.

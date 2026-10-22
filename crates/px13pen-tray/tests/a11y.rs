@@ -169,7 +169,13 @@ fn state_is_conveyed_as_check_and_radio_not_as_colour() {
         Some((true, 50)),
     )]);
     let spoken = spoken_of(&tray);
-    assert_eq!(spoken.checks, vec![("Haptics".to_string(), true)]);
+    assert_eq!(
+        spoken.checks,
+        vec![
+            ("Haptics".to_string(), true),
+            ("Status notifications".to_string(), true),
+        ]
+    );
     assert_eq!(spoken.submenus, ["Intensity"]);
     assert_eq!(
         spoken.radios,
@@ -189,7 +195,11 @@ fn state_is_conveyed_as_check_and_radio_not_as_colour() {
 fn a_pen_without_haptics_grows_no_switches() {
     let tray = PenTray::preview(vec![sample("SA205H", true, Some(78), None, false, None)]);
     let spoken = spoken_of(&tray);
-    assert!(spoken.checks.is_empty());
+    assert_eq!(
+        spoken.checks,
+        vec![("Status notifications".to_string(), true)],
+        "only the notification switch, which every pen has"
+    );
     assert!(spoken.submenus.is_empty());
     assert!(spoken.radios.is_empty());
 }

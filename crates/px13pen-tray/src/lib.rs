@@ -145,6 +145,12 @@ impl PenTray {
         match action.clone() {
             Action::SetHaptics { path, enabled } => self.set_haptics_enabled(path, enabled),
             Action::SetIntensity { path, intensity } => self.set_intensity(path, intensity),
+            Action::SetStatusNotifications { path, enabled } => {
+                self.write(
+                    format!("setting status notifications on {path}"),
+                    move |client| async move { client.set_status_notifications(&path, enabled).await },
+                );
+            }
             Action::Pair => self.start_pairing(),
             Action::Settings => self.open_settings(),
         }

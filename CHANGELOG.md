@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **Turn the status notes off from the tray**: the menu has a *Status
+  notifications* check item, the same switch as the settings window's.
 - **Inking texture from the first millimetre**: the texture is armed as soon
   as the pen hovers (for whichever end is pointing at the screen) instead
   of when the tip touches. Strokes started from out of range, and short
