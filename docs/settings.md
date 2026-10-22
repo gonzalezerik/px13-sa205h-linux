@@ -13,9 +13,10 @@ $ px13pen-settings --system   # px13pend serve --system
 
 ## What it shows
 
-One card per connected pen: name, address, link state, battery, and —
-once the daemon has read it from the connected pen — the pen's own
-firmware (`Pen1.FirmwareRevision`). A
+One card per connected pen: its name, then one line with the link state
+(connected or asleep), the battery and — once the daemon has read it
+(`Pen1.FirmwareRevision`) — the firmware version. The Bluetooth address
+is not shown. A
 card only grows haptics controls when the daemon exported a `Haptics1`
 interface for that pen — a pen that cannot do haptics never shows a
 switch that would do nothing. The haptics rows are the master switch

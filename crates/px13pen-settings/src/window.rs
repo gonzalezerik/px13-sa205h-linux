@@ -665,27 +665,23 @@ const BUTTON_NOTE: &str = "A command runs when the pen's top button fires the ge
                            commands are the only thing the button does: the pen's own \
                            Win+F18/19/20 keys are kept away from the desktop.";
 
-/// The card's one-line state under the pen name.
+/// The card's one-line state under the pen name, in the words a pen
+/// owner uses: no Bluetooth address (nothing to do with it, and it
+/// identifies the pen), and the firmware's version number without the
+/// build stamp the pen appends to it.
 fn describe(pen: &Pen) -> String {
     let battery = match pen.battery {
         Some(percent) => format!("battery {percent} %"),
         None => "battery unknown".to_string(),
     };
-    let state = if pen.present {
-        "connected"
-    } else {
-        "link down"
-    };
-    // The pen's own firmware string, once the daemon has read it.
+    let state = if pen.present { "connected" } else { "asleep" };
     let firmware = pen
         .firmware
         .as_deref()
-        .map_or(String::new(), |text| format!(" · firmware {text}"));
-    if pen.address.is_empty() {
-        format!("{state} · {battery}{firmware}")
-    } else {
-        format!("{} · {state} · {battery}{firmware}", pen.address)
-    }
+        .map(|text| text.split('_').next().unwrap_or(text))
+        .filter(|version| !version.is_empty())
+        .map_or(String::new(), |version| format!(" · firmware {version}"));
+    format!("{state} · {battery}{firmware}")
 }
 
 /// A `PairingEvent` as one toast. Unknown kinds pass their name
@@ -770,13 +766,18 @@ mod tests {
         assert_eq!(describe(&pen), "connected · battery unknown");
         pen.battery = Some(87);
         pen.address = String::from("<address>");
-        assert_eq!(describe(&pen), "<address> · connected · battery 87 %");
-        pen.present = false;
-        assert_eq!(describe(&pen), "<address> · link down · battery 87 %");
-        pen.firmware = Some("2.0.37".to_string());
         assert_eq!(
             describe(&pen),
-            "<address> · link down · battery 87 % · firmware 2.0.37"
+            "connected · battery 87 %",
+            "the address is not shown"
+        );
+        pen.present = false;
+        assert_eq!(describe(&pen), "asleep · battery 87 %");
+        pen.firmware = Some("2.0.37_09:29:59_Dec 15 2025".to_string());
+        assert_eq!(
+            describe(&pen),
+            "asleep · battery 87 % · firmware 2.0.37",
+            "the version, not the build stamp"
         );
     }
 
