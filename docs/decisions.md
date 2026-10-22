@@ -97,7 +97,8 @@ button this entry's plan — a uinput key emitter — was superseded on 2026-10-
   empty while no pen is connected, so a Waybar `custom` module hides itself, and other
   bars (Noctalia, quickshell, eww, ironbar) can use it from scripts. Example configs go
   in `contrib/`. No per-bar plugins.
-- **Tray icon:** one StatusNotifierItem with dbusmenu (`ksni`). It covers KDE, XFCE,
+- **Tray icon:** one StatusNotifierItem with dbusmenu (first built on `ksni`; since
+  2026-10-22 served directly on zbus 6, because `ksni` still pins zbus 5). It covers KDE, XFCE,
   Cinnamon, MATE, LXQt, Budgie, GNOME with the AppIndicator extension, and the trays of
   Waybar, swaybar, Noctalia, ironbar, HyprPanel, eww and quickshell. SNI gives a menu,
   not a custom popup: battery, link state, haptics toggle, intensity

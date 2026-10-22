@@ -1,6 +1,7 @@
 # `px13pen-tray` — the tray icon
 
-One StatusNotifierItem with a dbusmenu (`ksni`), a thin client of
+One StatusNotifierItem with a dbusmenu, served on zbus 6 like the rest of
+the project (`src/host.rs`), a thin client of
 `px13pend` like `px13penctl` (docs/dbus.md): no Bluetooth and no HID
 from this side. It covers KDE, XFCE, Cinnamon, MATE, LXQt, Budgie,
 GNOME with the AppIndicator extension, and the SNI trays of Waybar,

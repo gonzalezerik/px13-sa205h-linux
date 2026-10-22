@@ -8,16 +8,43 @@
 //! battery state by icon shape, nothing carried by colour alone.
 //!
 //! The running side (src/main.rs) keeps this state fresh from the
-//! daemon and lets a menu click write through.
+//! daemon, and src/host.rs puts it on the bus and lets a menu click
+//! write through.
 
-mod menu;
+pub mod host;
+pub mod menu;
 pub mod summary;
 
 use std::future::Future;
 
-use ksni::menu::MenuItem;
-use ksni::{Status, ToolTip, Tray};
 use px13pen_client::{Client, Pen, block_on};
+
+use crate::menu::{Action, MenuItem};
+
+/// StatusNotifierItem `Status`: a passive item may be hidden by the
+/// host, an active one is shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Status {
+    Active,
+    Passive,
+}
+
+impl Status {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Status::Active => "Active",
+            Status::Passive => "Passive",
+        }
+    }
+}
+
+/// StatusNotifierItem `ToolTip`, minus the pixmaps the tray never sends.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToolTip {
+    pub icon_name: String,
+    pub title: String,
+    pub description: String,
+}
 
 /// Everything the icon shows: the visible pens as last read, and
 /// whether the icon is currently shown or inside its hide timer.
@@ -113,6 +140,16 @@ impl PenTray {
         });
     }
 
+    /// Carry out a menu click.
+    pub fn run(&self, action: &Action) {
+        match action.clone() {
+            Action::SetHaptics { path, enabled } => self.set_haptics_enabled(path, enabled),
+            Action::SetIntensity { path, intensity } => self.set_intensity(path, intensity),
+            Action::Pair => self.start_pairing(),
+            Action::Settings => self.open_settings(),
+        }
+    }
+
     fn open_settings(&self) {
         // The same detachment a button action has: launched, then
         // its status is its own. The session's PATH carries the
@@ -123,20 +160,18 @@ impl PenTray {
     }
 }
 
-impl Tray for PenTray {
-    /// Left-click is how anyone reaches a tray's controls; opening
-    /// the menu beats activating a window no one asked for.
-    const MENU_ON_ACTIVATE: bool = true;
-
-    fn id(&self) -> String {
+/// What the StatusNotifierItem and its menu say, read by the host on
+/// every change signal.
+impl PenTray {
+    pub fn id(&self) -> String {
         env!("CARGO_PKG_NAME").to_string()
     }
 
-    fn title(&self) -> String {
+    pub fn title(&self) -> String {
         summary::title(&self.pens)
     }
 
-    fn status(&self) -> Status {
+    pub fn status(&self) -> Status {
         if self.shown && !self.pens.is_empty() {
             Status::Active
         } else {
@@ -144,11 +179,11 @@ impl Tray for PenTray {
         }
     }
 
-    fn icon_name(&self) -> String {
+    pub fn icon_name(&self) -> String {
         summary::icon_name(self.pens.first()).to_string()
     }
 
-    fn tool_tip(&self) -> ToolTip {
+    pub fn tool_tip(&self) -> ToolTip {
         let pen = self.pens.first();
         ToolTip {
             icon_name: summary::icon_name(pen).to_string(),
@@ -157,11 +192,10 @@ impl Tray for PenTray {
                 || "No pen connected".to_string(),
                 summary::tooltip_description,
             ),
-            icon_pixmap: Vec::new(),
         }
     }
 
-    fn menu(&self) -> Vec<MenuItem<Self>> {
+    pub fn menu(&self) -> Vec<MenuItem> {
         menu::build(self)
     }
 }

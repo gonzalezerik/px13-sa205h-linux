@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **The tray speaks StatusNotifierItem and dbusmenu itself, on zbus 6**:
+  `ksni` still depends on zbus 5, which brought back the unmaintained
+  `zbus_names`/`zvariant` advisories, and its Unlicense was not on the
+  allowed list. Same icon, texts and menu; the menu is now plain data, so
+  the accessibility tests read exactly what a host is sent. Fixed on the
+  way: the icon never hid after the 60 s grace period once it had been
+  shown.
 - **A double press of the top button opens RNote out of the box**: the
   `Buttons1.Double` default is now `rnote`, so a pen has somewhere to write the
   second it pairs. Anything stored in `px13pen/buttons.conf` wins in both

@@ -6,10 +6,9 @@
 //! redundancy — every fact in words as well as in shape — and these
 //! tests hold the menu and the texts to it (docs/decisions.md).
 
-use ksni::menu::{MenuItem, StandardItem};
-use ksni::{Status, Tray};
 use px13pen_client::{BatteryDetail, Haptics, Pen};
-use px13pen_tray::{PenTray, summary};
+use px13pen_tray::menu::{MenuItem, StandardItem};
+use px13pen_tray::{PenTray, Status, summary};
 
 fn sample(
     name: &str,
@@ -57,7 +56,7 @@ struct Spoken {
     radios: Vec<(Vec<String>, usize)>,
 }
 
-fn listen(items: &[MenuItem<PenTray>], spoken: &mut Spoken) {
+fn listen(items: &[MenuItem], spoken: &mut Spoken) {
     for item in items {
         match item {
             MenuItem::Standard(StandardItem { label, enabled, .. }) => {

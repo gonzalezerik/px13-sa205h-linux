@@ -5,14 +5,72 @@
 //! cannot buzz never grows a switch that would do nothing — and the
 //! two commands every pen needs. Controls carry their state as a
 //! check mark or a radio dot, never as colour.
+//!
+//! The menu is plain data: what a click does is an [`Action`] value,
+//! so a test reads it the way a host does (src/host.rs).
 
-use ksni::menu::{CheckmarkItem, MenuItem, RadioGroup, RadioItem, StandardItem, SubMenu};
 use px13pen_client::Pen;
 
 use crate::PenTray;
 use crate::summary::{self, INTENSITY_PRESETS};
 
-pub(super) fn build(tray: &PenTray) -> Vec<MenuItem<PenTray>> {
+/// One menu entry, as a dbusmenu host is told about it.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MenuItem {
+    Standard(StandardItem),
+    Checkmark(CheckmarkItem),
+    SubMenu(SubMenu),
+    RadioGroup(RadioGroup),
+    Separator,
+}
+
+/// A line: a fact when `action` is `None` (shown, not clickable), a
+/// command otherwise.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StandardItem {
+    pub label: String,
+    pub enabled: bool,
+    pub action: Option<Action>,
+}
+
+/// A switch, its state a check mark.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CheckmarkItem {
+    pub label: String,
+    pub checked: bool,
+    pub action: Action,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SubMenu {
+    pub label: String,
+    pub submenu: Vec<MenuItem>,
+}
+
+/// Mutually exclusive choices; `selected` indexes `options`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RadioGroup {
+    pub selected: usize,
+    pub options: Vec<RadioItem>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RadioItem {
+    pub label: String,
+    pub action: Action,
+}
+
+/// What a click asks for. A click carries the value its entry
+/// displayed, never a toggle of whatever the daemon holds by then.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Action {
+    SetHaptics { path: String, enabled: bool },
+    SetIntensity { path: String, intensity: u8 },
+    Pair,
+    Settings,
+}
+
+pub(super) fn build(tray: &PenTray) -> Vec<MenuItem> {
     let mut items = Vec::new();
     if tray.pens.is_empty() {
         items.push(info("No pen connected".to_string()));
@@ -29,81 +87,60 @@ pub(super) fn build(tray: &PenTray) -> Vec<MenuItem<PenTray>> {
         items.extend(haptics_controls(pen));
     }
     items.push(MenuItem::Separator);
-    items.push(
-        StandardItem {
-            label: "Pair a pen…".to_string(),
-            activate: Box::new(|tray: &mut PenTray| tray.start_pairing()),
-            ..Default::default()
-        }
-        .into(),
-    );
-    items.push(
-        StandardItem {
-            label: "Settings…".to_string(),
-            activate: Box::new(|tray: &mut PenTray| tray.open_settings()),
-            ..Default::default()
-        }
-        .into(),
-    );
+    items.push(command("Pair a pen…", Action::Pair));
+    items.push(command("Settings…", Action::Settings));
     items
 }
 
-/// The haptics switch and the intensity presets for one pen, writing
-/// the values the menu did not show as stale: a click carries the
-/// value it displayed.
-fn haptics_controls(pen: &Pen) -> Vec<MenuItem<PenTray>> {
+/// The haptics switch and the intensity presets for one pen.
+fn haptics_controls(pen: &Pen) -> Vec<MenuItem> {
     let haptics = pen
         .haptics
         .clone()
         .expect("only called for a pen with haptics");
-    let switch_path = pen.path.clone();
-    let target = !haptics.enabled;
-    let mut items = vec![
-        CheckmarkItem {
+    vec![
+        MenuItem::Checkmark(CheckmarkItem {
             label: "Haptics".to_string(),
             checked: haptics.enabled,
-            activate: Box::new(move |tray: &mut PenTray| {
-                tray.set_haptics_enabled(switch_path.clone(), target);
-            }),
-            ..Default::default()
-        }
-        .into(),
-    ];
-    let intensity_path = pen.path.clone();
-    items.push(
-        SubMenu {
+            action: Action::SetHaptics {
+                path: pen.path.clone(),
+                enabled: !haptics.enabled,
+            },
+        }),
+        MenuItem::SubMenu(SubMenu {
             label: "Intensity".to_string(),
-            submenu: vec![
-                RadioGroup {
-                    selected: summary::preset_index(haptics.intensity),
-                    select: Box::new(move |tray: &mut PenTray, index| {
-                        tray.set_intensity(intensity_path.clone(), INTENSITY_PRESETS[index].1);
-                    }),
-                    options: INTENSITY_PRESETS
-                        .iter()
-                        .map(|(label, _)| RadioItem {
-                            label: (*label).to_string(),
-                            ..Default::default()
-                        })
-                        .collect(),
-                }
-                .into(),
-            ],
-            ..Default::default()
-        }
-        .into(),
-    );
-    items
+            submenu: vec![MenuItem::RadioGroup(RadioGroup {
+                selected: summary::preset_index(haptics.intensity),
+                options: INTENSITY_PRESETS
+                    .iter()
+                    .map(|(label, intensity)| RadioItem {
+                        label: (*label).to_string(),
+                        action: Action::SetIntensity {
+                            path: pen.path.clone(),
+                            intensity: *intensity,
+                        },
+                    })
+                    .collect(),
+            })],
+        }),
+    ]
 }
 
 /// A fact, not a control: shown to every reader, click-proof.
-fn info(label: String) -> MenuItem<PenTray> {
-    StandardItem {
+fn info(label: String) -> MenuItem {
+    MenuItem::Standard(StandardItem {
         label,
         enabled: false,
-        ..Default::default()
-    }
-    .into()
+        action: None,
+    })
+}
+
+fn command(label: &str, action: Action) -> MenuItem {
+    MenuItem::Standard(StandardItem {
+        label: label.to_string(),
+        enabled: true,
+        action: Some(action),
+    })
 }
 
 #[cfg(test)]

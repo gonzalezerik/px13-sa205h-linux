@@ -12,12 +12,11 @@
 
 use std::process::ExitCode;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use ksni::blocking::TrayMethods;
 use px13pen_client::{Client, Pen, WatchEvent, block_on};
-use px13pen_tray::PenTray;
+use px13pen_tray::{PenTray, host};
 
 /// How long the icon waits after the last link drops. The measured
 /// idle drop is around 6–15 s after the pen is set down, so the icon
@@ -33,26 +32,21 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    // A desktop without a status-notifier host must not become a
-    // restart loop: asked to assume one may appear, the tray waits
-    // for the watcher instead of failing here.
-    let handle = match PenTray::new(client.clone())
-        .assume_sni_available(true)
-        .spawn()
-    {
+    let handle = match host::spawn(PenTray::new(client.clone())) {
         Ok(handle) => handle,
         Err(error) => {
-            eprintln!("px13pen-tray: no status notifier host: {error}");
+            eprintln!("px13pen-tray: {error}");
             return ExitCode::FAILURE;
         }
     };
 
     let mut pens: Vec<Pen> = Vec::new();
-    let mut shown = false;
-    // An armed hide carries the generation it was armed against;
-    // showing the icon again bumps the generation, and a timer that
-    // wakes up against an old one does nothing.
-    let mut pending_hide: Option<u64> = None;
+    // Whether the icon is up: set by a live link, cleared only by a
+    // grace timer that ran out. An armed timer carries the generation
+    // it was armed against; a link coming back bumps the generation,
+    // and a timer that wakes up against an old one does nothing.
+    let shown = Arc::new(AtomicBool::new(false));
+    let mut armed = false;
     let generation = Arc::new(AtomicU64::new(0));
 
     // Every event carries a whole pen, so the list is applied, never
@@ -68,25 +62,27 @@ fn main() -> ExitCode {
             WatchEvent::Button { .. } | WatchEvent::Pairing { .. } => {}
         }
         if pens.iter().any(|pen| pen.present) {
-            if pending_hide.take().is_some() {
+            if armed {
                 generation.fetch_add(1, Ordering::Relaxed);
+                armed = false;
             }
-            shown = true;
-        }
-        if shown {
-            handle.update(|tray| tray.set_state(pens.clone(), true));
-        } else if pending_hide.is_none() {
-            let armed = generation.load(Ordering::Relaxed);
-            pending_hide = Some(armed);
+            shown.store(true, Ordering::Relaxed);
+        } else if shown.load(Ordering::Relaxed) && !armed {
+            armed = true;
+            let at = generation.load(Ordering::Relaxed);
             let handle = handle.clone();
             let generation = Arc::clone(&generation);
+            let shown = Arc::clone(&shown);
             std::thread::spawn(move || {
                 std::thread::sleep(GRACE);
-                if generation.load(Ordering::Relaxed) == armed {
-                    handle.update(|tray| tray.hide());
+                if generation.load(Ordering::Relaxed) == at {
+                    shown.store(false, Ordering::Relaxed);
+                    handle.update(PenTray::hide);
                 }
             });
         }
+        let visible = shown.load(Ordering::Relaxed);
+        handle.update(|tray| tray.set_state(pens.clone(), visible));
     }));
     if let Err(error) = outcome {
         eprintln!("px13pen-tray: {error}");
