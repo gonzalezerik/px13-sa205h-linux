@@ -9,8 +9,15 @@ Drawing itself (pressure, tilt, eraser, side button) already works on Linux
 without this project. This adds the parts that ride Bluetooth.
 
 <p align="center">
-  <img src="docs/images/settings.png" width="560"
-       alt="The PX13 Pen settings window: the ASUS Pen card shows it connected with battery 100 % and firmware 2.0.37, haptic feedback on at intensity 100, while-inking and while-interacting switches on, the hover-out tick off, the ink texture set to ink, status notifications on, and a Shortcut button section where a double press runs rnote.">
+  <a href="docs/images/demo.mp4">
+    <img src="docs/images/demo.webp" width="300"
+         alt="Demo video: a double press of the top button does nothing while the pen is unpaired; one touch to the screen pairs it; a double press then opens RNote, a few strokes are drawn and erased with the eraser end.">
+  </a>
+  <br>
+  <sub>The pen starts unpaired, so a double press of its top button does nothing. One touch to
+  the screen pairs it. Flipped around, a double press opens RNote (the default action), a few
+  strokes go down and the eraser end wipes them. <a href="docs/images/demo.mp4">Full-quality
+  video</a></sub>
 </p>
 
 ## What you get
@@ -71,6 +78,11 @@ Then **sign out and back in**. That's all the setup there is.
 ## Settings, explained
 
 Open them from the tray (**Settings…**) or your app launcher (**PX13 Pen**).
+
+<p align="center">
+  <img src="docs/images/settings.png" width="560"
+       alt="The PX13 Pen settings window: the ASUS Pen card shows it connected with battery 100 % and firmware 2.0.37, haptic feedback on at intensity 100, while-inking and while-interacting switches on, the hover-out tick off, the ink texture set to ink, status notifications on, and a Shortcut button section where a double press runs rnote.">
+</p>
 
 | Setting | What it does | Default |
 |---|---|---|
