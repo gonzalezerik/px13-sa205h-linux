@@ -163,6 +163,7 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
         status: Arc::new(Mutex::new(settings::load_status())),
         tracker: Mutex::new(status::Tracker::default()),
         status_note_id: AtomicU32::new(0),
+        pen_node: Mutex::new(None),
     });
     state.register_host().await;
     connection
@@ -333,6 +334,11 @@ struct State {
     /// The id of the last status note, passed as `replaces_id` so the
     /// next one takes its place on screen instead of stacking up.
     status_note_id: AtomicU32,
+    /// The pen's HID node, kept open between the drain loop's writes:
+    /// finding it means enumerating every HID device, far too slow to
+    /// do on every stroke. Dropped and reopened when a write fails,
+    /// which is what a reconnect (a new node) looks like from here.
+    pen_node: Mutex<Option<(HidDevice, String)>>,
 }
 
 /// The listener's memory of one announced address.
@@ -605,7 +611,25 @@ impl State {
             ink::Action::Disarm => Effect::of(ORDINAL_NONE),
             ink::Action::Nothing => return false,
         };
-        crate::haptics::send_to_pen(None, &effect.to_output_report()).is_ok()
+        self.write_to_pen(&effect.to_output_report()).is_ok()
+    }
+
+    /// Write one report through the cached pen node, opening it on
+    /// first use and reopening it once if the cached one failed.
+    fn write_to_pen(&self, report: &[u8]) -> Result<(), String> {
+        let mut node = locked(&self.pen_node);
+        if let Some((device, name)) = node.as_ref() {
+            if crate::haptics::write_report(device, name, report).is_ok() {
+                return Ok(());
+            }
+            *node = None;
+        }
+        let (device, name) = crate::haptics::open_pen(None)?;
+        let written = crate::haptics::write_report(&device, &name, report);
+        if written.is_ok() {
+            *node = Some((device, name));
+        }
+        written
     }
 
     /// The opt-in hover tick (findings/007 §4): the pen lifted out of
@@ -624,7 +648,7 @@ impl State {
             intensity: intensity_byte(settings.intensity),
             ..Effect::of(ordinal)
         };
-        crate::haptics::send_to_pen(None, &effect.to_output_report()).ok();
+        self.write_to_pen(&effect.to_output_report()).ok();
     }
 
     /// Start (or extend) the LE scan while a pen is in range and none is

@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **Inking texture from the first millimetre**: the texture is armed as soon
+  as the pen hovers (for whichever end is pointing at the screen) instead
+  of when the tip touches. Strokes started from out of range, and short
+  taps, used to begin, or entirely happen, without texture while the
+  write crossed Bluetooth. Writes also reuse the open pen node instead of
+  enumerating every HID device each time.
 - **An open tray menu follows the pen**: the menu now announces changes with
   both `LayoutUpdated` and `ItemsPropertiesUpdated`, so hosts that refresh
   an open menu on either one show "Docked", battery and the haptics switch

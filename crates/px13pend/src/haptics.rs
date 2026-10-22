@@ -124,6 +124,13 @@ fn parse(args: &[String]) -> Result<Command, String> {
 /// Write the report to the pen's HID node (uhid names it after the
 /// GATT name, so "pen" is in it; the digitizer is excluded by id).
 pub(crate) fn send_to_pen(path: Option<&str>, report: &[u8]) -> Result<(), String> {
+    let (device, node_name) = open_pen(path)?;
+    write_report(&device, &node_name, report)
+}
+
+/// Open the pen's HID node: `path` when given, otherwise the one
+/// pen-named node. Returns the device and a name for messages.
+pub(crate) fn open_pen(path: Option<&str>) -> Result<(hidapi::HidDevice, String), String> {
     let api = HidApi::new().map_err(|error| format!("cannot open the HID subsystem: {error}"))?;
     let (open, node_name) = match path {
         Some(explicit) => {
@@ -165,6 +172,15 @@ pub(crate) fn send_to_pen(path: Option<&str>, report: &[u8]) -> Result<(), Strin
         }
     };
     let device = open.map_err(|error| format!("cannot open {node_name}: {error}"))?;
+    Ok((device, node_name))
+}
+
+/// One output report to an open pen node; a short write is an error.
+pub(crate) fn write_report(
+    device: &hidapi::HidDevice,
+    node_name: &str,
+    report: &[u8],
+) -> Result<(), String> {
     let written = device
         .write(report)
         .map_err(|error| format!("output report to {node_name} failed: {error}"))?;

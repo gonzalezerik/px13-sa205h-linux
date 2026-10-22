@@ -5,9 +5,13 @@
 //! Verified on hardware (findings/009 §3): one write of a continuous
 //! waveform stays armed across separate tip contacts — the pen itself
 //! gates it on the tip switch — and the None ordinal 1 both cuts
-//! playback and disarms until the next write. So the daemon arms once
-//! per tool activation and writes nothing until the pen leaves range
-//! or the policy closes.
+//! playback and disarms until the next write. So the daemon arms as
+//! soon as the pen comes into hover range, for the end that is
+//! hovering (the Invert bit says which), and writes nothing more until
+//! the pen leaves range, flips ends or the policy closes. Arming on
+//! contact instead left the start of every stroke begun from out of
+//! range — and all of a short tap — without texture, waiting for the
+//! write to cross Bluetooth.
 //!
 //! The state machine is pure: digitizer frames in, write actions out,
 //! outcomes back in — the whole policy is testable without a pen. The
@@ -37,19 +41,24 @@ pub enum Action {
 /// Report 7 button byte: pen in range.
 pub(crate) const IN_RANGE: u8 = 0x01;
 /// Report 7 button byte: tip touching.
+#[cfg(test)]
 const TIP_CONTACT: u8 = 0x02;
-/// Report 7 button byte: eraser end touching (the pen inverted).
+/// Report 7 button byte: Invert, the eraser end is the one in range
+/// (hovering 0x09 measured on hardware).
+const INVERT: u8 = 0x08;
+/// Report 7 button byte: eraser end touching.
 const ERASER_CONTACT: u8 = 0x20;
 
-/// Which end is touching on a report 7 button byte; the eraser wins
-/// if a firmware ever sets both.
+/// Which end is in range on a report 7 button byte: the eraser end
+/// when Invert or eraser contact is set, the tip otherwise; `None` out
+/// of range.
 fn tool_of(buttons: u8) -> Option<Tool> {
-    if buttons & ERASER_CONTACT != 0 {
-        Some(Tool::Eraser)
-    } else if buttons & TIP_CONTACT != 0 {
-        Some(Tool::Tip)
-    } else {
+    if buttons & IN_RANGE == 0 {
         None
+    } else if buttons & (INVERT | ERASER_CONTACT) != 0 {
+        Some(Tool::Eraser)
+    } else {
+        Some(Tool::Tip)
     }
 }
 
@@ -58,7 +67,7 @@ fn tool_of(buttons: u8) -> Option<Tool> {
 pub struct Arming {
     /// The ordinal armed on the pen, with the tool that armed it.
     armed: Option<(Tool, u8)>,
-    /// The tool in contact on the last report 7 seen.
+    /// The end in range on the last report 7 seen.
     in_contact: Option<Tool>,
     /// A write was already attempted this tick.
     attempted: bool,
@@ -87,10 +96,9 @@ impl Arming {
         let desired = if !in_range {
             self.armed.as_ref().map(|_| Action::Disarm)
         } else if let Some((tool, armed)) = self.armed {
-            // The end in contact decides: flipping to the other end
-            // re-arms for its texture. Hovering keeps the armed tool's
-            // texture current, so a texture change or a policy close
-            // lands on the next report.
+            // The end in range decides: flipping to the other end
+            // re-arms for its texture, and a texture change or a
+            // policy close lands on the next report.
             let tool = self.in_contact.unwrap_or(tool);
             match ordinal_for(tool) {
                 None => Some(Action::Disarm),
@@ -187,10 +195,39 @@ mod tests {
     }
 
     #[test]
-    fn hovering_arms_nothing() {
+    fn hovering_arms_before_the_tip_lands() {
         let mut arming = Arming::default();
-        assert_eq!(tick(&mut arming, &[frame(HOVER)]), vec![Action::Nothing]);
-        assert_eq!(arming.armed, None);
+        assert_eq!(
+            tick(&mut arming, &[frame(HOVER)]),
+            vec![Action::Arm {
+                tool: Tool::Tip,
+                ordinal: 9
+            }]
+        );
+        arming.on_done(
+            &Action::Arm {
+                tool: Tool::Tip,
+                ordinal: 9,
+            },
+            true,
+        );
+        assert_eq!(
+            tick(&mut arming, &[frame(TIP)]),
+            vec![Action::Nothing],
+            "the touch finds the texture already armed"
+        );
+    }
+
+    #[test]
+    fn the_eraser_end_hovering_arms_the_eraser_texture() {
+        let mut arming = Arming::default();
+        assert_eq!(
+            tick(&mut arming, &[frame(IN_RANGE | INVERT)]),
+            vec![Action::Arm {
+                tool: Tool::Eraser,
+                ordinal: 14
+            }]
+        );
     }
 
     #[test]
