@@ -1,15 +1,15 @@
 # Your laptop, your pen — a different machine than the one documented here
 
-**Nobody has tested this project on any hardware except the ProArt PX13 + SA205H pair**
-([devices](devices.md)). Not a Surface, not an HP or Lenovo convertible, not another ASUS
-model — and, since it keeps being asked, **not the ROG Flow Z13** either. No page in this
-wiki claims otherwise, and the daemon deliberately matches only the one digitizer it knows
-(`04F3:4631`, in `crates/px13pen-core/src/lib.rs`); on other hardware it does nothing.
+This project has only been tested on one pairing: the ProArt PX13 with the SA205H pen
+([devices](devices.md)). Other machines — Surface devices, HP and Lenovo convertibles,
+other ASUS models such as the ROG Flow Z13 — haven't been tried yet. The daemon only
+recognises the digitizer it was built for (`04F3:4631`, listed in
+`crates/px13pen-core/src/lib.rs`), so on other hardware it stays idle rather than guessing.
 
-This page is the honest path for anyone with a different pen-capable machine: find out
-what you actually have with read-only checks, then either build for it yourself or hand
-the maintainer a hardware report good enough to work from. The exact Flow Z13 answer comes
-out of steps A–D below — roughly an evening, nothing written to any device.
+If you have a different pen-capable machine, this page walks you through finding out what
+it has using read-only checks. From there you can build support yourself, or send the
+maintainer a hardware report to work from. For a Flow Z13 or similar, steps A–D below take
+about an evening and never write anything to a device.
 
 ## A. What already works without anything installed
 
