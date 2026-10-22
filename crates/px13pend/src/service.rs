@@ -71,8 +71,13 @@ const DRAIN_LIMIT: usize = 512;
 /// after this pause instead of never, and a working one is not hammered.
 const RETRY_AFTER: Duration = Duration::from_secs(5);
 /// Failures within this long of the previous one belong to the same
-/// streak and stay out of the notifications; a later one is news again.
-const FAILURE_STREAK: Duration = Duration::from_secs(60);
+/// streak, which notifies at most once; a later one starts a new streak.
+const FAILURE_STREAK: Duration = Duration::from_secs(300);
+/// How long a streak of "the pen did not answer" stays quiet. The pen
+/// ignores touches for about two minutes after a failed connect — after
+/// its pairing was removed, for one — and pairs on a later touch; a
+/// notification for that would only be noise.
+const QUIET_NO_ANSWER: Duration = Duration::from_secs(150);
 /// How long the LE scan keeps running after the pen was last seen in range.
 const SCAN_WINDOW: Duration = Duration::from_secs(20);
 
@@ -342,9 +347,52 @@ struct State {
 }
 
 /// The listener's memory of one announced address.
+#[derive(Clone, Copy)]
 struct Attempt {
     at: Instant,
     failed: bool,
+    /// When the current run of failures began.
+    streak_since: Option<Instant>,
+    /// Whether this run of failures has already notified.
+    notified: bool,
+}
+
+/// The record after an attempt that ended at `now`, and whether its
+/// failure is worth a notification: once per streak, and for a pen in
+/// its back-off ("did not answer") only once the streak has outlasted
+/// `QUIET_NO_ANSWER`.
+fn after_attempt(
+    prior: Option<Attempt>,
+    now: Instant,
+    failed: bool,
+    no_answer: bool,
+) -> (Attempt, bool) {
+    if !failed {
+        return (
+            Attempt {
+                at: now,
+                failed: false,
+                streak_since: None,
+                notified: false,
+            },
+            false,
+        );
+    }
+    let ongoing =
+        prior.filter(|prior| prior.failed && now.duration_since(prior.at) < FAILURE_STREAK);
+    let streak_since = ongoing.and_then(|prior| prior.streak_since).unwrap_or(now);
+    let notified = ongoing.is_some_and(|prior| prior.notified);
+    let quiet = no_answer && now.duration_since(streak_since) < QUIET_NO_ANSWER;
+    let notify = !notified && !quiet;
+    (
+        Attempt {
+            at: now,
+            failed: true,
+            streak_since: Some(streak_since),
+            notified: notified || notify,
+        },
+        notify,
+    )
 }
 
 /// One known pen: the shared values plus what the sync task remembers
@@ -736,25 +784,27 @@ impl State {
             identity::Choice::Busy => return Ok(()),
             identity::Choice::Pair => {}
         }
-        let failed_before = {
+        let prior = {
             let mut attempts = locked(&self.attempts);
-            if attempts
-                .get(&address)
-                .is_some_and(|attempt| attempt.at.elapsed() < RETRY_AFTER)
-            {
+            let prior = attempts.get(&address).copied();
+            if prior.is_some_and(|attempt| attempt.at.elapsed() < RETRY_AFTER) {
                 return Ok(());
             }
-            let failed_before = attempts
-                .get(&address)
-                .is_some_and(|attempt| attempt.failed && attempt.at.elapsed() < FAILURE_STREAK);
+            // Holds the address off for RETRY_AFTER while this attempt
+            // runs; the streak fields carry over untouched.
             attempts.insert(
                 address.clone(),
                 Attempt {
                     at: Instant::now(),
-                    failed: failed_before,
+                    ..prior.unwrap_or(Attempt {
+                        at: Instant::now(),
+                        failed: false,
+                        streak_since: None,
+                        notified: false,
+                    })
                 },
             );
-            failed_before
+            prior
         };
         eprintln!("pen announced: {address} (flags 0x{:02X})", note.flags);
         emit_pairing(daemon, "announced", &address).await?;
@@ -764,13 +814,10 @@ impl State {
         let outcome =
             crate::pairing::pair_announced(&self.bluez, &self.adapter, &device, note, &agent).await;
         self.put_listener(device);
-        locked(&self.attempts).insert(
-            address.clone(),
-            Attempt {
-                at: Instant::now(),
-                failed: outcome.is_err(),
-            },
-        );
+        let no_answer = matches!(&outcome, Err(message) if message == crate::pairing::NO_ANSWER);
+        let (record, notify_failure) =
+            after_attempt(prior, Instant::now(), outcome.is_err(), no_answer);
+        locked(&self.attempts).insert(address.clone(), record);
         match outcome {
             Ok(crate::pairing::Outcome::Paired { name, address }) => {
                 *locked(&self.scan_until) = None;
@@ -786,7 +833,7 @@ impl State {
             Err(message) => {
                 eprintln!("pairing failed: {message}");
                 emit_pairing(daemon, "failed", &format!("{address}: {message}")).await?;
-                if !failed_before {
+                if notify_failure {
                     self.notify("Pen pairing failed", failure_text(&message))
                         .await;
                 }
@@ -2138,6 +2185,40 @@ impl Notifications1 {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_pen_in_its_back_off_stays_quiet_then_speaks_once() {
+        let t0 = Instant::now();
+        let (first, notify) = after_attempt(None, t0, true, true);
+        assert!(!notify, "the first no-answer is the back-off, not news");
+        let (second, notify) = after_attempt(Some(first), t0 + Duration::from_secs(60), true, true);
+        assert!(!notify);
+        let (third, notify) =
+            after_attempt(Some(second), t0 + Duration::from_secs(155), true, true);
+        assert!(notify, "still no answer past the back-off");
+        let (_, notify) = after_attempt(Some(third), t0 + Duration::from_secs(170), true, true);
+        assert!(!notify, "once per streak");
+    }
+
+    #[test]
+    fn a_real_pairing_error_notifies_at_once_and_once() {
+        let t0 = Instant::now();
+        let (first, notify) = after_attempt(None, t0, true, false);
+        assert!(notify);
+        let (_, notify) = after_attempt(Some(first), t0 + Duration::from_secs(10), true, false);
+        assert!(!notify);
+    }
+
+    #[test]
+    fn success_ends_the_streak() {
+        let t0 = Instant::now();
+        let (failed, _) = after_attempt(None, t0, true, false);
+        let (paired, notify) =
+            after_attempt(Some(failed), t0 + Duration::from_secs(5), false, false);
+        assert!(!notify);
+        let (_, notify) = after_attempt(Some(paired), t0 + Duration::from_secs(20), true, false);
+        assert!(notify, "a failure after a success is news again");
+    }
 
     #[test]
     fn pairing_failures_read_as_what_to_do_next() {

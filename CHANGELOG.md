@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+- **No "pairing failed" for a pen that is only catching its breath**: after
+  its pairing is removed or a connection fails, the pen ignores touches for
+  about two minutes. The daemon keeps retrying quietly through that and
+  only notifies if the pen still hasn't paired after two and a half minutes.
+  Other pairing errors still notify right away, once.
+
 ## 0.1.0 — 2026-10-22
 
 First release.

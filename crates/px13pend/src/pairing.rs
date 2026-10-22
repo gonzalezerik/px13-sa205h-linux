@@ -257,6 +257,12 @@ pub(crate) async fn any_pen_connected(bluez: &Connection, adapter: &str) -> bool
         .is_ok_and(|found| found.iter().any(|pen| pen.paired && pen.connected))
 }
 
+/// The failure when the pen sent no advertisement after the key: it is
+/// in its back-off after a failed connect or pairing, and answers again
+/// on a later touch. The daemon keeps retrying it quietly.
+pub(crate) const NO_ANSWER: &str =
+    "the pen did not answer (it skips a touch after a failed attempt; touch again)";
+
 /// Run one seamless pairing for an announcement. The scan must already be
 /// running: the pen's advertisement follows the key within milliseconds.
 pub(crate) async fn pair_announced(
@@ -337,10 +343,7 @@ pub(crate) async fn pair_announced(
                 break pen;
             }
             if Instant::now() >= deadline {
-                return Err(
-                    "the pen did not answer (it skips a touch after a failed attempt; touch again)"
-                        .to_string(),
-                );
+                return Err(NO_ANSWER.to_string());
             }
             Delay::new(POLL).await;
         }
