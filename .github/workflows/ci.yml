@@ -33,7 +33,7 @@ jobs:
         run: podman build -f container/Containerfile.${{ matrix.libc }} --target test .
       - name: runtime image
         run: |
-          podman build -f container/Containerfile.${{ matrix.libc }} -t px13-sa205h-linux:${{ matrix.libc }} .
+          podman build -f container/Containerfile.${{ matrix.libc }} --target runtime -t px13-sa205h-linux:${{ matrix.libc }} .
           podman run --rm px13-sa205h-linux:${{ matrix.libc }} --version
 
   nix:
