@@ -10,7 +10,7 @@ description = "Status-notifier tray for px13pend"
 
 [dependencies]
 futures-util = "0.3"
-px13pen-client = { path = "../px13pen-client", version = "0.1.0" }
+px13pen-client = { path = "../px13pen-client", version = "0.1.1" }
 serde = { version = "1", features = ["derive"] }
 zbus = "6.0.0"
 
