@@ -75,6 +75,23 @@ fn rules_text() -> String {
             hid_kernel_match(HID_BUS_BLUETOOTH, *id)
         ));
     }
+    // The pen's Bluetooth input devices (the top button's keyboard and
+    // a mouse) carry nothing the desktop needs: inking and the barrel
+    // button ride the digitizer, and the daemon reads the top button
+    // from hidraw, acting only on its three gesture codes. Hiding them
+    // from libinput means a device that impersonates a bonded pen can
+    // fake a shortcut press at most, never type into the session.
+    text.push_str(
+        "\n# Keep the pens' Bluetooth keyboard and mouse away from the desktop:\n\
+         # libinput-based compositors ignore them, px13pend reads the\n\
+         # top-button gestures from hidraw instead.\n",
+    );
+    for (id, name) in SUPPORTED_PENS {
+        text.push_str(&format!(
+            "# {name}\nSUBSYSTEM==\"input\", KERNELS==\"{}\", ENV{{LIBINPUT_IGNORE_DEVICE}}=\"1\"\n",
+            hid_kernel_match(HID_BUS_BLUETOOTH, *id)
+        ));
+    }
     text
 }
 

@@ -92,8 +92,9 @@ pub fn config_path() -> Option<PathBuf> {
 }
 
 /// The shortcut button policy: one shell command per top-button
-/// gesture, `""` meaning do nothing. The pen's own Win+F18/19/20 press
-/// reaches the compositor either way (docs/dbus.md §7). One gesture
+/// gesture, `""` meaning do nothing. These are the button's only
+/// effect: the pen's own Win+F18/19/20 press is kept from the
+/// compositor by the shipped udev rule (docs/dbus.md §7). One gesture
 /// arrives bound out of the box: a double press opens RNote — a pen
 /// deserves a note app the moment it pairs, and any of the three can
 /// be rebound or cleared from the settings window.
@@ -171,7 +172,7 @@ pub fn buttons_to_text(settings: &ButtonSettings) -> String {
     format!(
         "# px13pen shortcut button actions — written by px13pend; see docs/settings.md.\n\
          # One shell command per gesture; empty means do nothing.\n\
-         # The pen's Win+F18/19/20 always reach the compositor too.\n\
+         # The pen's own Win+F18/19/20 keys never reach the desktop.\n\
          single={}\n\
          double={}\n\
          long={}\n",

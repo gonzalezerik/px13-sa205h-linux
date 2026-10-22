@@ -661,9 +661,9 @@ fn ink_textures(pen: &Pen) -> Vec<String> {
 /// What every shortcut-button entry shares, said once as the group's
 /// description: what a command is, how it saves, and the one trap.
 const BUTTON_NOTE: &str = "A command runs when the pen's top button fires the gesture; \
-                           leave one empty to do nothing. Press Enter to save. The pen's \
-                           own Win+F18/19/20 keys still reach the desktop — bind a gesture \
-                           here or in the compositor, not both.";
+                           leave one empty to do nothing. Press Enter to save. These \
+                           commands are the only thing the button does: the pen's own \
+                           Win+F18/19/20 keys are kept away from the desktop.";
 
 /// The card's one-line state under the pen name.
 fn describe(pen: &Pen) -> String {

@@ -1294,9 +1294,9 @@ impl State {
 
     /// Run the gesture's configured action: a shell command the user
     /// stored (docs/dbus.md §7). Nothing else: the pen's own
-    /// Win+F18/19/20 press still reaches the compositor as always, and
-    /// a compositor-side binding is the user's choice, not this
-    /// daemon's.
+    /// Win+F18/19/20 press is kept from the compositor (the shipped
+    /// udev rule hides the pen's keyboard from libinput), so this is
+    /// the only thing a gesture does.
     fn run_action(&self, gesture: Gesture) {
         let commands = locked(&self.buttons);
         let command = match gesture {
@@ -1727,8 +1727,8 @@ impl Pen {
 
     /// The pen's top shortcut button fired a gesture the pen itself
     /// classified: one of `buttons.shortcut-gestures` (`single`,
-    /// `double`, `long`). The pen's own Win+F18/19/20 press still
-    /// reaches the compositor independently (docs/dbus.md §5).
+    /// `double`, `long`). The pen's own Win+F18/19/20 press is kept
+    /// from the compositor (docs/dbus.md §5).
     #[zbus(signal)]
     async fn button_event(signal_emitter: &SignalEmitter<'_>, gesture: &str) -> zbus::Result<()>;
 }
@@ -1969,8 +1969,8 @@ impl Haptics {
 /// The shortcut button interface, exported on every pen path: one
 /// shell command per gesture, `""` meaning do nothing. Shared by every
 /// pen (one user, one policy) and persisted to the user's config file
-/// (settings.rs). The pen's own Win+F18/19/20 press reaches the
-/// compositor regardless of what is configured here.
+/// (settings.rs). The pen's own Win+F18/19/20 press never reaches the
+/// compositor, so these commands are all the button does.
 pub struct Buttons1 {
     settings: Arc<Mutex<settings::ButtonSettings>>,
 }

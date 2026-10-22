@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **The pen's Bluetooth keyboard and mouse stay off the desktop**: the udev
+  rule now hides them from libinput, so the top button does only what its
+  configured commands say and nothing fires twice. Because Linux pairs with
+  passkey 0, this also limits what a device posing as a bonded pen could
+  do to faking a shortcut gesture. Compositor bindings for Win+F18/19/20
+  no longer fire; key remappers that grab every keyboard must exclude
+  `330a:0001` (docs/packaging.md).
 - **The tray speaks StatusNotifierItem and dbusmenu itself, on zbus 6**:
   `ksni` still depends on zbus 5, which brought back the unmaintained
   `zbus_names`/`zvariant` advisories, and its Unlicense was not on the

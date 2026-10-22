@@ -163,6 +163,7 @@ no grab, no race with the compositor at session start — the grab-first design 
 compositor that grabs on startup and stays off the table unless a compositor-side interface
 appears. An action and a compositor-side key binding for the same gesture fire twice; the
 settings window says so, because the pen's key press is the pen's, not ours to hide.
+(Superseded on the last point by the 2026-10-22 entry: the key press is now hidden.)
 
 ## 2026-10-21: the tray's open numbers get set
 
@@ -270,3 +271,28 @@ pen it already has (the failed-retry loop of 2026-10-18). So:
   ten-byte read among six Report characteristics, the rest haptics
   state and padding. A pen that answers nothing leaves the daemon in
   the old conservative behaviour; nothing else depends on the read.
+
+## 2026-10-22: the pen's Bluetooth keyboard and mouse stay off the desktop
+
+Linux pairs the pen with passkey 0 (docs/how-the-pen-connects.md), so someone who records
+the pairing moment can work out the link key and later pose as the pen. What a fake pen
+could do is whatever the pen's Bluetooth input devices can do: its keyboard collection
+can send any key, not only Win+F18/19/20, and its mouse collection can move and click.
+That is the one serious consequence of the passkey-0 gap, and it is cheap to remove.
+
+The shipped udev rule sets `LIBINPUT_IGNORE_DEVICE` on every input device under the pen's
+Bluetooth HID device, so libinput-based compositors never see them. Nothing the desktop
+needs rides those devices: ink, pressure, tilt, eraser and the barrel button come over the
+digitizer, the battery is a power supply, and `px13pend` reads the top button from hidraw
+and acts only on its three gesture codes (single, double, long) — anything else on that
+report is ignored. A spoofed pen can therefore fake at most a shortcut gesture, which runs
+only the commands the user configured, never typed input.
+
+This replaces the 2026-10-21 position that the pen's key press is not ours to hide: with
+it hidden, `Buttons1` actions are the button's only effect and nothing fires twice.
+Compositor-side bindings for Win+F18/19/20 stop working. Tools that read evdev nodes
+directly instead of through libinput (key remappers such as keyd, or anything with a
+catch-all device match) still see the devices and must exclude the pen themselves
+(vendor `330a`, product `0001`); docs/packaging.md says how. This limits the damage of
+the gap; closing it still needs LE legacy out-of-band pairing in the kernel
+(docs/future/kernel-le-legacy-oob.md).

@@ -11,3 +11,9 @@ SUBSYSTEM=="hidraw", KERNELS=="0018:04F3:4631.*", TAG+="uaccess"
 
 # MPP 2.6 haptic pen (ASUS SA205H class)
 SUBSYSTEM=="hidraw", KERNELS=="0005:330A:0001.*", TAG+="uaccess"
+
+# Keep the pens' Bluetooth keyboard and mouse away from the desktop:
+# libinput-based compositors ignore them, px13pend reads the
+# top-button gestures from hidraw instead.
+# MPP 2.6 haptic pen (ASUS SA205H class)
+SUBSYSTEM=="input", KERNELS=="0005:330A:0001.*", ENV{LIBINPUT_IGNORE_DEVICE}="1"

@@ -58,11 +58,27 @@ cargo xtask generate-udev-rules --check   # what CI runs; fails on drift
 ```
 
 from the supported-device tables in `px13pen-core`, so a new device lands in the rule at the same
-commit that adds support for it. The rule only adds `TAG+="uaccess"` for the pen-related
-`hidraw` nodes. The leading digits of each `hidraw` parent name are the **HID bus type**, not a
+commit that adds support for it. The rule does two things: it adds `TAG+="uaccess"` for the
+pen-related `hidraw` nodes, and it sets `LIBINPUT_IGNORE_DEVICE` on the input devices under
+the pen's Bluetooth HID device (its keyboard and mouse collections), so the desktop never acts
+on them (docs/decisions.md, 2026-10-22). The leading digits of each `hidraw` parent name are the **HID bus type**, not a
 boot-volatile number: `0018` is HID over I2C (the built-in digitizer), `0005` is HID over
 Bluetooth (the pen). Those ids are part of the kernel's HID core and are the same on every
 machine.
+
+`LIBINPUT_IGNORE_DEVICE` only reaches programs that go through libinput. A tool that grabs
+evdev nodes itself with a catch-all match re-sends whatever it reads through its own virtual
+device and undoes the rule; exclude the pen there by vendor and product, `330a:0001`. For
+keyd that is an `ids` entry:
+
+```ini
+[ids]
+*
+-330a:0001
+```
+
+The pen's input devices are created anew on every Bluetooth reconnect, which these pens do
+seconds after each pickup, so the rule applies without a re-trigger.
 
 ## Pairing and privilege
 

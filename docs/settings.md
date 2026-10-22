@@ -47,10 +47,9 @@ gesture runs, empty meaning do nothing. *Double press* starts out as
 `rnote` — a pen wants a note app the moment it pairs — and clearing
 the entry is how you take that back. Typing reveals a check button
 in the entry; pressing it or pressing Enter sends the command. The card
-says what the entries share: the
-pen's own Win+F18/19/20 key press still reaches the desktop whatever
-you type here, so a gesture bound in both the compositor and this
-window fires twice — pick one side.
+says what the entries share: these commands are all the button does,
+because the pen's own Win+F18/19/20 key press is kept away from the
+desktop (docs/decisions.md, 2026-10-22).
 
 Pairing needs no button: `px13pend` listens from the start and pairs a new
 pen as soon as it comes near the screen. `Search for pens` runs
@@ -93,7 +92,7 @@ empty meaning do nothing.
 ```ini
 # px13pen shortcut button actions — written by px13pend; see docs/settings.md.
 # One shell command per gesture; empty means do nothing.
-# The pen's Win+F18/19/20 always reach the compositor too.
+# The pen's own Win+F18/19/20 keys never reach the desktop.
 single=notify-send "pen button"
 double=
 long=

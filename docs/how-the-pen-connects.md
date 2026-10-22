@@ -143,7 +143,10 @@ sent through the digitizer, so the key never crosses the radio. The Linux kernel
 LE legacy out-of-band support (the pen is legacy-only), so Linux uses passkey entry; the
 pen has nothing to type with and enters 0. The pen accepts that as authenticated pairing
 and the user sees the same thing as on Windows, but the pairing moment is not protected
-against a passive eavesdropper. The kernel feature that would close the gap is noted in
+against a passive eavesdropper. What a recorded pairing could be used for is kept small:
+the pen's Bluetooth keyboard and mouse are hidden from the desktop, so a device posing as
+the pen can fake at most a shortcut gesture (docs/decisions.md, 2026-10-22). The kernel
+feature that would close the gap is noted in
 [docs/future/kernel-le-legacy-oob.md](future/kernel-le-legacy-oob.md); details in
 [docs/protocol/seamless-pairing.md](protocol/seamless-pairing.md) §3.
 

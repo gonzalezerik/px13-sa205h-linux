@@ -112,7 +112,7 @@ pen, retried on later connections until the pen answers.
 
 | Signal | Args | Meaning |
 |---|---|---|
-| `ButtonEvent` | `s gesture` | the top shortcut button fired a gesture the pen itself classified — one of `buttons.shortcut-gestures` (`single`, `double`, `long`), added within v1 (§2). The daemon reads the pen's reports off its HID node beside the compositor's grab (findings/010 §4), so the gesture is seen even while the compositor holds the keyboard node. The pen's own Win+F18/19/20 press still reaches the compositor independently: a compositor-side binding and a `Buttons1` action (§8) for the same gesture fire twice. |
+| `ButtonEvent` | `s gesture` | the top shortcut button fired a gesture the pen itself classified — one of `buttons.shortcut-gestures` (`single`, `double`, `long`), added within v1 (§2). The daemon reads the pen's reports off its HID node beside the compositor's grab (findings/010 §4), so the gesture is seen even while the compositor holds the keyboard node. The pen's own Win+F18/19/20 press does not reach the compositor: the shipped udev rule hides the pen's Bluetooth keyboard and mouse from libinput (docs/decisions.md, 2026-10-22). |
 
 ## 6. The capability schema
 
@@ -209,10 +209,10 @@ The command runs as `sh -c <command>` from the daemon's session, detached, and i
 status is not reported back. `ButtonEvent` (§5) fires whether or not a command is set —
 watchers see every gesture, and an action is only one possible response to it.
 
-Two things the action is **not**: it does not replace the pen's own Win+F18/19/20 press,
-which reaches the compositor as always (the pen sends it; the daemon reads a copy). A user
-who also binds those keys in the compositor sees both fire — bind one side, not both. And
-it is host policy, never a pen write: the commands persist across daemon restarts in
+The action is the button's only effect: the pen's own Win+F18/19/20 press never reaches
+the compositor, because the shipped udev rule hides the pen's Bluetooth keyboard and mouse
+from libinput (docs/decisions.md, 2026-10-22), so compositor-side bindings for those keys
+do nothing. It is host policy, never a pen write: the commands persist across daemon restarts in
 `px13pen/buttons.conf` under `$XDG_CONFIG_HOME`, beside the haptics file (docs/settings.md).
 
 ## 9. `io.github.gonzalezerik.Px13Pen.Notifications1`
