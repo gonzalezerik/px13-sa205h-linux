@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+- **Only one daemon per session**: D-Bus activation now goes through
+  `px13pend.service`, and a second daemon exits instead of taking over the
+  bus name. Two daemons used to answer the same touch, fail each other's
+  pairing and show two error notifications.
+- **Pairing failures say what to do next** ("The pen didn't answer in time.
+  Touch it to the screen again to retry.") instead of showing the raw
+  Bluetooth error, which stays in the journal.
 - **The pen's Bluetooth keyboard and mouse stay off the desktop**: the udev
   rule now hides them from libinput, so the top button does only what its
   configured commands say and nothing fires twice. Because Linux pairs with

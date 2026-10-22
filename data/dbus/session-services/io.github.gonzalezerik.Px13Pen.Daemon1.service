@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Session-bus activation for the per-user daemon: px13pen-settings, px13penctl
 # or the tray starting a D-Bus call brings px13pend up without any unit
-# being enabled. @PREFIX@ is substituted at install time.
+# being enabled. SystemdService hands activation to px13pend.service, so
+# a D-Bus call racing the session start reuses the unit's daemon instead
+# of launching a second one; Exec is the fallback on buses without
+# systemd. @PREFIX@ is substituted at install time.
 
 [D-BUS Service]
 Name=io.github.gonzalezerik.Px13Pen.Daemon1
 Exec=@PREFIX@/bin/px13pend serve
+SystemdService=px13pend.service

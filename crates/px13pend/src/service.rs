@@ -37,7 +37,7 @@ use crate::settings::{self, HapticsSettings};
 use crate::shortcut::{self, Gesture};
 use crate::status::{self, Note};
 use crate::telemetry::Report;
-use zbus::fdo::{self, ManagedObjects};
+use zbus::fdo::{self, ManagedObjects, RequestNameFlags, RequestNameReply};
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 use zbus::wire::{ObjectPath, OwnedObjectPath, OwnedVariant, Variant};
 use zbus::{Connection, Proxy};
@@ -113,10 +113,18 @@ async fn serve_async(system: bool, adapter: String) -> Result<(), String> {
             .map_err(|error| format!("cannot reach the system bus (BlueZ): {error}"))?
     };
     let seamless = digitizer_present();
-    connection
-        .request_name(BUS_NAME)
+    // One daemon per user: no replacing an owner and no being replaced.
+    // Two daemons would both answer the same touch and fail each
+    // other's pairing (zbus's default flags allow both).
+    let reply = connection
+        .request_name_with_flags(BUS_NAME, RequestNameFlags::DO_NOT_QUEUE)
         .await
         .map_err(|error| format!("cannot own {BUS_NAME} (another px13pend serving?): {error}"))?;
+    if reply != RequestNameReply::PrimaryOwner {
+        return Err(format!(
+            "{BUS_NAME} is already owned; another px13pend is serving"
+        ));
+    }
     // Touch-to-pair is the point of a seamless-pairing digitizer, so the
     // listener runs from the start; StopPairing() turns it off.
     let listener = if seamless {
@@ -755,7 +763,8 @@ impl State {
                 eprintln!("pairing failed: {message}");
                 emit_pairing(daemon, "failed", &format!("{address}: {message}")).await?;
                 if !failed_before {
-                    self.notify("Pen pairing failed", &message).await;
+                    self.notify("Pen pairing failed", failure_text(&message))
+                        .await;
                 }
             }
         }
@@ -1403,6 +1412,30 @@ async fn emit_pairing(
         .pairing_event(kind, detail)
         .await
         .map_err(|error| format!("cannot emit PairingEvent: {error}"))
+}
+
+/// What a failed pairing tells the user: what to try next, in plain
+/// words. The BlueZ error itself goes to the journal and to the
+/// `PairingEvent` signal, where someone debugging can read it.
+fn failure_text(error: &str) -> &'static str {
+    const RETRY: &str = "Touch the pen to the screen again to retry.";
+    if error.contains("InProgress") {
+        "Another pairing attempt was still running. Touch the pen to the screen again in a moment."
+    } else if error.contains("AuthenticationFailed")
+        || error.contains("AuthenticationRejected")
+        || error.contains("AuthenticationCanceled")
+    {
+        "The pen turned the pairing down. Hold its top button until the light blinks white, \
+         then touch the pen to the screen."
+    } else if error.contains("Page Timeout")
+        || error.contains("ConnectionAttemptFailed")
+        || error.contains("Timeout")
+        || error.contains("timed out")
+    {
+        "The pen didn't answer in time. Touch it to the screen again to retry."
+    } else {
+        RETRY
+    }
 }
 
 /// Parse a stored pen path for the object server.
@@ -2071,6 +2104,31 @@ impl Notifications1 {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn pairing_failures_read_as_what_to_do_next() {
+        assert!(
+            failure_text("Pair: org.bluez.Error.InProgress: In Progress").contains("in a moment")
+        );
+        assert!(
+            failure_text("Pair: org.bluez.Error.ConnectionAttemptFailed: Page Timeout")
+                .contains("didn't answer")
+        );
+        assert!(
+            failure_text("Pair: org.bluez.Error.AuthenticationFailed: x").contains("blinks white")
+        );
+        assert_eq!(
+            failure_text("something new"),
+            "Touch the pen to the screen again to retry."
+        );
+        for text in [
+            failure_text("org.bluez.Error.InProgress"),
+            failure_text("Page Timeout"),
+            failure_text("other"),
+        ] {
+            assert!(!text.contains("org.bluez"), "no D-Bus names in {text:?}");
+        }
+    }
     use super::*;
 
     #[test]
